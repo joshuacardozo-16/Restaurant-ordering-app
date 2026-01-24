@@ -1,0 +1,6 @@
+Flask
+Flask-Login
+Flask-WTF
+Flask-SQLAlchemy
+pytest
+psycopg2-binary
