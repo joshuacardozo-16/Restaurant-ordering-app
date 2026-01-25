@@ -22,6 +22,10 @@ def create_app():
     from .routes.admin_routes import admin_bp
     app.register_blueprint(admin_bp)
 
+    from .routes.customer_routes import customer_bp
+    app.register_blueprint(customer_bp)
+
+
     @app.get("/")
     def home():
         return render_template("home.html")
