@@ -3,41 +3,88 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h4 mb-0">My Orders</h1>
-  <a class="btn btn-outline-dark btn-sm" href="{{ url_for('customer.menu') }}">Order again</a>
+  <div>
+    <h1 class="h4 mb-0">My Orders</h1>
+    <div class="text-muted small">Track active orders and view order history.</div>
+  </div>
+  <a class="btn btn-outline-dark btn-sm" href="{{ url_for('customer.menu') }}">Back to menu</a>
 </div>
 
-<div class="card shadow-sm border-0">
-  <div class="table-responsive">
-    <table class="table align-middle mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>ID</th>
-          <th>Created</th>
-          <th>Type</th>
-          <th>Status</th>
-          <th>Total</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for o in orders %}
-        <tr>
-          <td class="fw-semibold">#{{ o.id }}</td>
-          <td class="text-muted small">{{ o.created_at }}</td>
-          <td>{{ o.order_type }}</td>
-          <td><span class="badge text-bg-secondary">{{ o.status }}</span></td>
-          <td>£{{ "%.2f"|format(o.total_price) }}</td>
-          <td class="text-end">
-            <a class="btn btn-sm btn-outline-dark" href="{{ url_for('customer.order_confirmation', order_id=o.id) }}">View</a>
-          </td>
-        </tr>
-      {% endfor %}
-      {% if not orders %}
-        <tr><td colspan="6" class="text-center text-muted py-4">No orders yet.</td></tr>
-      {% endif %}
-      </tbody>
-    </table>
+{% set active_statuses = ['pending', 'preparing', 'ready', 'out_for_delivery'] %}
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Active</h2>
+
+        {% set active = [] %}
+        {% for o in orders %}
+          {% if o.status in active_statuses %}
+            {% set _ = active.append(o) %}
+          {% endif %}
+        {% endfor %}
+
+        {% if active %}
+          <div class="list-group list-group-flush">
+            {% for o in active %}
+              <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                 href="{{ url_for('customer.order_confirmation', order_id=o.id) }}">
+                <div>
+                  <div class="fw-semibold">Order #{{ o.id }}</div>
+                  <div class="text-muted small">
+                    {{ o.order_type|capitalize }} • {{ o.created_at.strftime("%d %b %Y, %H:%M") }}
+                  </div>
+                </div>
+                <div class="text-end">
+                  <div class="fw-semibold">£{{ "%.2f"|format(o.total_price) }}</div>
+                  <span class="badge text-bg-warning text-dark">{{ o.status.replace('_',' ')|capitalize }}</span>
+                </div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">No active orders right now.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Past orders</h2>
+
+        {% set past = [] %}
+        {% for o in orders %}
+          {% if o.status not in active_statuses %}
+            {% set _ = past.append(o) %}
+          {% endif %}
+        {% endfor %}
+
+        {% if past %}
+          <div class="list-group list-group-flush">
+            {% for o in past %}
+              <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                 href="{{ url_for('customer.order_confirmation', order_id=o.id) }}">
+                <div>
+                  <div class="fw-semibold">Order #{{ o.id }}</div>
+                  <div class="text-muted small">
+                    {{ o.order_type|capitalize }} • {{ o.created_at.strftime("%d %b %Y, %H:%M") }}
+                  </div>
+                </div>
+                <div class="text-end">
+                  <div class="fw-semibold">£{{ "%.2f"|format(o.total_price) }}</div>
+                  <span class="badge text-bg-secondary">{{ o.status.replace('_',' ')|capitalize }}</span>
+                </div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">No past orders yet.</div>
+        {% endif %}
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -18,29 +18,32 @@
       <!-- Always visible -->
       <a class="btn btn-outline-light btn-sm" href="{{ url_for('customer.menu') }}">Menu</a>
 
-      {% if current_user.is_authenticated %}
+    {% if current_user.is_authenticated %}
 
-        <!-- Cart link + badge count -->
-        {% set cart = session.get('cart', {}) %}
-        {% set cart_count = cart.values() | sum %}
-        <a class="btn btn-outline-light btn-sm position-relative" href="{{ url_for('customer.cart_view') }}">
-          Cart
-          {% if cart_count and cart_count > 0 %}
-            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
-              {{ cart_count }}
-            </span>
-          {% endif %}
-        </a>
-
-        <!-- Admin link only for admins -->
-        {% if current_user.role == 'admin' %}
-          <a class="btn btn-warning btn-sm" href="{{ url_for('admin.dashboard') }}">Admin</a>
+      <!-- Cart link + badge count -->
+      {% set cart = session.get('cart', {}) %}
+      {% set cart_count = cart.values() | sum %}
+      <a class="btn btn-outline-light btn-sm position-relative" href="{{ url_for('customer.cart_view') }}">
+        Cart
+        {% if cart_count and cart_count > 0 %}
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
+            {{ cart_count }}
+          </span>
         {% endif %}
-
-        <span class="navbar-text text-white-50 d-none d-md-inline">Hi, {{ current_user.full_name }}</span>
-        <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.logout') }}">Logout</a>
-
-      {% else %}
+      </a>
+    
+      <!-- My Orders (customers) -->
+      <a class="btn btn-outline-light btn-sm" href="{{ url_for('customer.my_orders') }}">My Orders</a>
+    
+      <!-- Admin link only for admins -->
+      {% if current_user.role == 'admin' %}
+        <a class="btn btn-warning btn-sm" href="{{ url_for('admin.dashboard') }}">Admin</a>
+      {% endif %}
+    
+      <span class="navbar-text text-white-50 d-none d-md-inline">Hi, {{ current_user.full_name }}</span>
+      <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.logout') }}">Logout</a>
+    
+      {% else %}    
         <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.login') }}">Login</a>
         <a class="btn btn-warning btn-sm" href="{{ url_for('auth.register') }}">Register</a>
       {% endif %}
