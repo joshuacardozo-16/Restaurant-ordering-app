@@ -54,6 +54,54 @@
             <div class="mb-3">
               {{ form.pickup_time_requested.label(class_="form-label") }}
               {{ form.pickup_time_requested(class_="form-control", placeholder="e.g. 18:30") }}
+              <div class="text-muted small mt-1">Pickup automatically applies a 15% discount.</div>
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <h2 class="h6 mb-3">Payment (demo)</h2>
+          <div class="row g-3">
+            <div class="col-12">
+              {{ form.cardholder_name.label(class_="form-label") }}
+              {{ form.cardholder_name(class_="form-control", autocomplete="cc-name") }}
+            </div>
+
+            <div class="col-12">
+              {{ form.card_number.label(class_="form-label") }}
+              {{ form.card_number(
+                  class_="form-control",
+                  placeholder="1234 5678 9012 3456",
+                  id="card_number",
+                  inputmode="numeric",
+                  maxlength="19",
+                  autocomplete="cc-number"
+              ) }}
+              <div class="text-muted small mt-1">Demo only — card details are not stored.</div>
+            </div>
+
+            <div class="col-md-6">
+              {{ form.expiry.label(class_="form-label") }}
+              {{ form.expiry(
+                  class_="form-control",
+                  placeholder="MM/YY",
+                  id="expiry",
+                  inputmode="numeric",
+                  maxlength="5",
+                  autocomplete="cc-exp"
+              ) }}
+            </div>
+
+            <div class="col-md-6">
+              {{ form.cvc.label(class_="form-label") }}
+              {{ form.cvc(
+                  class_="form-control",
+                  placeholder="123",
+                  id="cvc",
+                  inputmode="numeric",
+                  maxlength="4",
+                  autocomplete="cc-csc"
+              ) }}
             </div>
           </div>
 
@@ -67,29 +115,53 @@
   </div>
 
   <div class="col-lg-5">
-    <div class="card shadow-sm border-0">
-      <div class="card-body p-4">
-        <h2 class="h6 mb-3">Order summary</h2>
+    <div class="position-sticky" style="top: 92px;">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+          <h2 class="h6 mb-3">Order summary</h2>
 
-        <div class="list-group list-group-flush">
-          {% for row in cart_rows %}
-            <div class="list-group-item d-flex justify-content-between">
-              <div>
-                <div class="fw-semibold">{{ row.item.name }}</div>
-                <div class="text-muted small">Qty: {{ row.qty }}</div>
+          <div class="list-group list-group-flush">
+            {% for row in cart_rows %}
+              <div class="list-group-item d-flex justify-content-between">
+                <div>
+                  <div class="fw-semibold">{{ row.item.name }}</div>
+                  <div class="text-muted small">Qty: {{ row.qty }}</div>
+                </div>
+                <div class="fw-semibold">£{{ "%.2f"|format(row.line_total) }}</div>
               </div>
-              <div class="fw-semibold">£{{ "%.2f"|format(row.line_total) }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mt-3">
+            <div class="d-flex justify-content-between">
+              <span class="text-muted">Subtotal</span>
+              <span class="fw-semibold">£{{ "%.2f"|format(subtotal) }}</span>
             </div>
-          {% endfor %}
-        </div>
 
-        <div class="d-flex justify-content-between mt-3">
-          <div class="fw-semibold">Total</div>
-          <div class="fw-semibold">£{{ "%.2f"|format(total) }}</div>
-        </div>
+            {% if discount and discount > 0 %}
+            <div class="d-flex justify-content-between">
+              <span class="text-muted">Pickup discount (15%)</span>
+              <span class="fw-semibold">− £{{ "%.2f"|format(discount) }}</span>
+            </div>
+            {% endif %}
 
-        <div class="text-muted small mt-2">
-          Tip: Delivery needs Address line 1, City and Postcode. Pickup needs a pickup time.
+            {% if delivery_fee and delivery_fee > 0 %}
+            <div class="d-flex justify-content-between">
+              <span class="text-muted">Delivery fee</span>
+              <span class="fw-semibold">+ £{{ "%.2f"|format(delivery_fee) }}</span>
+            </div>
+            {% endif %}
+
+            <hr>
+            <div class="d-flex justify-content-between">
+              <span class="fw-semibold">Total</span>
+              <span class="fw-semibold">£{{ "%.2f"|format(total) }}</span>
+            </div>
+
+            <div class="text-muted small mt-2">
+              Delivery requires Address line 1, City and Postcode. Pickup requires a pickup time.
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -99,23 +171,93 @@
 <script>
   function toggleFields() {
     const selected = document.querySelector('input[name="order_type"]:checked')?.value;
+
     const deliveryFields = document.getElementById("delivery_fields");
     const pickupFields = document.getElementById("pickup_fields");
+
+    const addr1 = document.getElementById("delivery_address_line1");
+    const city = document.getElementById("city");
+    const postcode = document.getElementById("postcode");
+    const pickupTime = document.getElementById("pickup_time_requested");
 
     if (selected === "delivery") {
       deliveryFields.style.display = "block";
       pickupFields.style.display = "none";
+
+      // required for delivery
+      if (addr1) addr1.required = true;
+      if (city) city.required = true;
+      if (postcode) postcode.required = true;
+
+      // not required for delivery
+      if (pickupTime) pickupTime.required = false;
     } else {
       deliveryFields.style.display = "none";
       pickupFields.style.display = "block";
+
+      // required for pickup
+      if (pickupTime) pickupTime.required = true;
+
+      // not required for pickup
+      if (addr1) addr1.required = false;
+      if (city) city.required = false;
+      if (postcode) postcode.required = false;
     }
+  }
+
+  // Reload checkout with order_type=... so totals update server-side
+  function refreshPricing() {
+    const selected = document.querySelector('input[name="order_type"]:checked')?.value;
+    if (!selected) return;
+    const baseUrl = "{{ url_for('customer.checkout') }}";
+    const url = new URL(baseUrl, window.location.origin);
+    url.searchParams.set("order_type", selected);
+    window.location.href = url.toString();
+  }
+
+  function formatCardNumber(value) {
+    const digits = value.replace(/\D/g, "").slice(0, 16);
+    return digits.replace(/(.{4})/g, "$1 ").trim();
+  }
+
+  function formatExpiry(value) {
+    const digits = value.replace(/\D/g, "").slice(0, 4);
+    if (digits.length <= 2) return digits;
+    return digits.slice(0, 2) + "/" + digits.slice(2);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     toggleFields();
+
     document.querySelectorAll('input[name="order_type"]').forEach((el) => {
-      el.addEventListener("change", toggleFields);
+      el.addEventListener("change", () => {
+        toggleFields();
+        refreshPricing();
+      });
     });
+
+    const card = document.getElementById("card_number");
+    const expiry = document.getElementById("expiry");
+    const cvc = document.getElementById("cvc");
+
+    if (card) {
+      card.addEventListener("input", () => {
+        card.value = formatCardNumber(card.value);
+      });
+    }
+
+    if (expiry) {
+      expiry.addEventListener("input", () => {
+        expiry.value = formatExpiry(expiry.value);
+      });
+    }
+
+    if (cvc) {
+      cvc.addEventListener("input", () => {
+        cvc.value = cvc.value.replace(/\D/g, "").slice(0, 4);
+      });
+    }
   });
 </script>
+
 {% endblock %}

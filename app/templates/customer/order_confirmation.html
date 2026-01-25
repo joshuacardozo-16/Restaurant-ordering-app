@@ -4,13 +4,19 @@
 {% block content %}
 <div class="p-4 bg-white rounded-4 shadow-sm border">
   <h1 class="h4 mb-2">Order Confirmed ✅</h1>
-  <p class="text-muted mb-3">Thanks! Your order has been placed.</p>
+  <p class="text-muted mb-3">Thanks! Your order has been placed at Saffron &amp; Smoke.</p>
 
   <div class="mb-3">
     <div><span class="fw-semibold">Order ID:</span> {{ order.id }}</div>
     <div><span class="fw-semibold">Type:</span> {{ order.order_type }}</div>
     <div><span class="fw-semibold">Status:</span> {{ order.status }}</div>
-    <div><span class="fw-semibold">Total:</span> £{{ "%.2f"|format(order.total_price) }}</div>
+    <div><span class="fw-semibold">Total paid:</span> £{{ "%.2f"|format(order.total_price) }}</div>
+
+    {% if last4 %}
+      <div class="mt-2"><span class="fw-semibold">Payment:</span> Card ending ****{{ last4 }}</div>
+    {% else %}
+      <div class="mt-2"><span class="fw-semibold">Payment:</span> Card (demo)</div>
+    {% endif %}
   </div>
 
   <a class="btn btn-dark" href="{{ url_for('customer.my_orders') }}">View My Orders</a>

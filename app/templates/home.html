@@ -5,14 +5,18 @@
 <div class="p-4 p-md-5 bg-white rounded-4 shadow-sm border">
   <div class="row align-items-center g-4">
     <div class="col-md-7">
-      <h1 class="display-6 fw-semibold mb-2">Order food faster — delivery or pickup</h1>
+      <div class="badge text-bg-warning text-dark mb-3">Pickup deal: 15% off automatically</div>
+      <h1 class="display-6 fw-semibold mb-2">Saffron &amp; Smoke — order in minutes</h1>
       <p class="text-muted mb-4">
-        Browse the menu, add items to your cart, and place an order in minutes.
+        Delivery when you need it, pickup when you want to save. Fresh menu, fast checkout.
       </p>
 
-      {% if current_user.is_authenticated %}
+      {% if current_user.is_authenticated and current_user.role == 'admin' %}
+        <a class="btn btn-warning btn-lg me-2" href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <a class="btn btn-outline-dark btn-lg" href="{{ url_for('customer.menu') }}">Preview Menu</a>
+      {% elif current_user.is_authenticated %}
         <a class="btn btn-dark btn-lg me-2" href="{{ url_for('customer.menu') }}">View Menu</a>
-        <a class="btn btn-outline-dark btn-lg" href="{{ url_for('customer.my_orders') }}">My Orders</a>
+        <a class="btn btn-outline-dark btn-lg" href="{{ url_for('customer.cart_view') }}">My Cart</a>
       {% else %}
         <a class="btn btn-warning btn-lg me-2" href="{{ url_for('auth.register') }}">Create account</a>
         <a class="btn btn-outline-dark btn-lg" href="{{ url_for('auth.login') }}">Login</a>
@@ -21,12 +25,12 @@
 
     <div class="col-md-5">
       <div class="bg-light rounded-4 p-4 border">
-        <div class="fw-semibold mb-2">What you’ll be able to do:</div>
+        <div class="fw-semibold mb-2">Designed to increase sales</div>
         <ul class="text-muted mb-0">
-          <li>Browse menu & specials</li>
-          <li>Delivery address checkout</li>
-          <li>Pickup time selection</li>
-          <li>Track order status</li>
+          <li>Pickup discount to boost conversion</li>
+          <li>Recommended add-ons to increase basket value</li>
+          <li>Fast checkout with payment step</li>
+          <li>Admin tools to update menu instantly</li>
         </ul>
       </div>
     </div>
