@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Manage Menu{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h4 mb-0">Menu Items</h1>
+    <div class="text-muted small">Keep prices and availability up to date to avoid lost sales.</div>
+  </div>
+  <a class="btn btn-warning" href="{{ url_for('admin.menu_new') }}">+ New Item</a>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Price</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in items %}
+        <tr>
+          <td class="fw-semibold">{{ i.name }}</td>
+          <td>{{ i.category }}</td>
+          <td>£{{ "%.2f"|format(i.price) }}</td>
+          <td>
+            {% if i.is_available %}
+              <span class="badge text-bg-success">Available</span>
+            {% else %}
+              <span class="badge text-bg-secondary">Hidden</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.menu_edit', item_id=i.id) }}">Edit</a>
+
+            <form method="post" action="{{ url_for('admin.menu_toggle', item_id=i.id) }}" class="d-inline">
+              <button class="btn btn-sm btn-outline-secondary" type="submit">
+                {% if i.is_available %}Hide{% else %}Show{% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+
+        {% if not items %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-4">No menu items yet. Click “New Item” to add one.</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
