@@ -1,0 +1,25 @@
+:root{
+    --radius: 18px;
+  }
+  
+  body{
+    min-height: 100vh;
+    background: radial-gradient(1200px circle at 10% 10%, #fff 0%, #f6f7fb 35%, #eef1f7 100%);
+  }
+  
+  .card{
+    border-radius: var(--radius);
+  }
+  
+  .btn, .form-control{
+    border-radius: 14px;
+  }
+  
+  .navbar{
+    box-shadow: 0 10px 30px rgba(0,0,0,.12);
+  }
+  
+  .auth-card-title{
+    letter-spacing: -0.02em;
+  }
+  

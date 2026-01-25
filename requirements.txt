@@ -4,3 +4,4 @@ Flask-WTF
 Flask-SQLAlchemy
 pytest
 psycopg2-binary
+email-validator
