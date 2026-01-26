@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Admin Orders{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h4 mb-0">Orders</h1>
+    <div class="text-muted small">Manage order status for customers (live updates on “My Orders”).</div>
+  </div>
+  <a class="btn btn-outline-dark btn-sm" href="{{ url_for('admin.dashboard') }}">Back to admin</a>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>Customer</th>
+          <th>Created</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Total</th>
+          <th style="width: 220px;">Update</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for o in orders %}
+        <tr>
+          <td class="fw-semibold">#{{ o.id }}</td>
+          <td>{{ o.user.full_name }}<div class="text-muted small">{{ o.user.email }}</div></td>
+          <td class="text-muted small">{{ o.created_at.strftime("%d %b %Y, %H:%M") }}</td>
+          <td>{{ o.order_type }}</td>
+          <td>
+            {% if o.status in ['pending','preparing','ready','out_for_delivery'] %}
+              <span class="badge text-bg-warning text-dark">{{ o.status.replace('_',' ')|capitalize }}</span>
+            {% elif o.status == 'delivered' %}
+              <span class="badge text-bg-success">{{ o.status|capitalize }}</span>
+            {% elif o.status == 'cancelled' %}
+              <span class="badge text-bg-danger">{{ o.status|capitalize }}</span>
+            {% else %}
+              <span class="badge text-bg-secondary">{{ o.status|capitalize }}</span>
+            {% endif %}
+          </td>
+          <td>£{{ "%.2f"|format(o.total_price) }}</td>
+          <td>
+            <form method="post" action="{{ url_for('admin.order_update_status', order_id=o.id) }}" class="d-flex gap-2">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select class="form-select form-select-sm" name="status">
+                {% for s in ['pending','preparing','ready','out_for_delivery','delivered','cancelled'] %}
+                  <option value="{{ s }}" {% if o.status == s %}selected{% endif %}>
+                    {{ s.replace('_',' ')|capitalize }}
+                  </option>
+                {% endfor %}
+              </select>
+              <button class="btn btn-sm btn-dark" type="submit">Save</button>
+            </form>
+          </td>
+        </tr>
+
+        <tr class="table-light">
+          <td colspan="7" class="small">
+            <div class="d-flex flex-wrap gap-3">
+              {% if o.order_type == 'delivery' %}
+                <div><span class="fw-semibold">Address:</span>
+                  {{ o.delivery_address_line1 }} {% if o.delivery_address_line2 %}, {{ o.delivery_address_line2 }}{% endif %},
+                  {{ o.city }}, {{ o.postcode }}
+                </div>
+              {% else %}
+                <div><span class="fw-semibold">Pickup time:</span> {{ o.pickup_time_requested }}</div>
+              {% endif %}
+              {% if o.delivery_instructions %}
+                <div><span class="fw-semibold">Instructions:</span> {{ o.delivery_instructions }}</div>
+              {% endif %}
+            </div>
+
+            <div class="mt-2">
+              <span class="fw-semibold">Items:</span>
+              {% for it in o.items %}
+                <span class="badge text-bg-secondary me-1">
+                  {{ it.quantity }} × {{ it.menu_item.name }}
+                </span>
+              {% endfor %}
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+
+      {% if not orders %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No orders yet.</td></tr>
+      {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
