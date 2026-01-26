@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Menu{% endblock %}
 
+{# Fixed restaurant section order #}
 {% set CATEGORY_ORDER = [
   "Starters",
   "Sharers",
@@ -16,11 +17,43 @@
   "Drinks"
 ] %}
 
+{# Simple “Popular” list (safe now, data-driven later with Firestore) #}
+{% set POPULAR_NAMES = [
+  "Saffron Smash Burger",
+  "Butter Chicken Masala",
+  "Saffron Rice Bowl – Chicken",
+  "Burger Meal Deal",
+  "Wings Sharer (12 pcs)",
+  "Chicken Tikka Wrap",
+  "Loaded Fries (Cheese & Jalapeño)",
+  "Mango Lassi",
+  "Chocolate Fudge Brownie"
+] %}
+
 {% block content %}
-<div class="d-flex flex-wrap gap-2 justify-content-between align-items-end mb-3">
+<div class="menu-hero p-4 p-md-5 rounded-4 shadow-sm mb-4 text-white">
+  <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
+    <div>
+      <h1 class="display-6 fw-bold mb-1">Saffron &amp; Smoke</h1>
+      <div class="opacity-75">
+        Pickup gets <span class="fw-semibold">15% off</span> • Free delivery over <span class="fw-semibold">£25</span>
+      </div>
+      <div class="opacity-75 small mt-1">Order in seconds — add sides & sauces to boost your meal.</div>
+    </div>
+
+    <div class="d-flex gap-2 align-items-center">
+      <a class="btn btn-light btn-sm fw-semibold" href="{{ url_for('customer.cart_view') }}">
+        View Cart
+      </a>
+      <a class="btn btn-outline-light btn-sm" href="#top">Browse</a>
+    </div>
+  </div>
+</div>
+
+<div id="top" class="d-flex flex-wrap gap-2 justify-content-between align-items-end mb-3">
   <div>
-    <h1 class="h4 mb-0">Menu</h1>
-    <div class="text-muted small">Saffron &amp; Smoke — pickup gets 15% off, free delivery over £25.</div>
+    <h2 class="h5 mb-0">Menu</h2>
+    <div class="text-muted small">Tap a section to jump, or search your favourites.</div>
   </div>
 
   <form class="d-flex gap-2" method="get" action="{{ url_for('customer.menu') }}">
@@ -42,16 +75,35 @@
 
 {% set placeholder = url_for('static', filename='img/placeholder-food.jpg') %}
 
+{% macro badge_row(item) %}
+  <div class="d-flex gap-2 align-items-center flex-wrap mt-2">
+    {% if item.name in POPULAR_NAMES %}
+      <span class="badge text-bg-warning text-dark">🔥 Popular</span>
+    {% endif %}
+    {% if item.category == "Meal Deals" %}
+      <span class="badge text-bg-success">Value Deal</span>
+    {% endif %}
+    {% if item.category in ["Sauces", "Sides"] %}
+      <span class="badge text-bg-secondary">Add-on</span>
+    {% endif %}
+  </div>
+{% endmacro %}
+
 {% macro item_card(item) %}
   <div class="col">
-    <div class="card h-100 shadow-sm border-0">
-      <img
-        src="{{ item.image_url or placeholder }}"
-        class="card-img-top"
-        style="height: 170px; object-fit: cover;"
-        alt="{{ item.name }}"
-        onerror="this.onerror=null;this.src='{{ placeholder }}';"
-      >
+    <div class="card menu-card h-100 border-0 shadow-sm">
+      <div class="menu-img-wrap">
+        <img
+          src="{{ item.image_url or placeholder }}"
+          class="card-img-top menu-img"
+          alt="{{ item.name }}"
+          onerror="this.onerror=null;this.src='{{ placeholder }}';"
+        >
+        {% if item.name in POPULAR_NAMES %}
+          <div class="menu-popular-pill">🔥 Popular</div>
+        {% endif %}
+      </div>
+
       <div class="card-body d-flex flex-column">
         <div class="d-flex justify-content-between align-items-start gap-2">
           <div class="fw-semibold">{{ item.name }}</div>
@@ -60,12 +112,18 @@
 
         {% if item.description %}
           <div class="text-muted small mt-1">{{ item.description }}</div>
+        {% else %}
+          <div class="text-muted small mt-1">Freshly prepared.</div>
         {% endif %}
+
+        {{ badge_row(item) }}
 
         <div class="mt-auto pt-3">
           <form method="post" action="{{ url_for('customer.cart_add', item_id=item.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-dark btn-sm w-100" type="submit">Add to cart</button>
+            <button class="btn btn-outline-dark btn-sm w-100" type="submit">
+              Add to cart
+            </button>
           </form>
         </div>
       </div>
@@ -94,9 +152,10 @@
     {% if grouped.get(cat) %}
       <div class="mt-4" id="{{ cat|replace(' ','-')|lower }}">
         <div class="d-flex justify-content-between align-items-end mb-2">
-          <h2 class="h5 mb-0">{{ cat }}</h2>
+          <h3 class="h5 mb-0">{{ cat }}</h3>
           <span class="text-muted small">{{ grouped[cat]|length }} item(s)</span>
         </div>
+
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
           {% for it in grouped[cat] %}
             {{ item_card(it) }}
@@ -111,7 +170,7 @@
     {% if cat not in CATEGORY_ORDER %}
       <div class="mt-4" id="{{ cat|replace(' ','-')|lower }}">
         <div class="d-flex justify-content-between align-items-end mb-2">
-          <h2 class="h5 mb-0">{{ cat }}</h2>
+          <h3 class="h5 mb-0">{{ cat }}</h3>
           <span class="text-muted small">{{ cat_items|length }} item(s)</span>
         </div>
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">

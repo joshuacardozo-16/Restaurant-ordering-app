@@ -22,4 +22,42 @@
   .auth-card-title{
     letter-spacing: -0.02em;
   }
+
+  /* Menu hero */
+.menu-hero {
+  background: linear-gradient(135deg, #111827, #1f2937);
+}
+
+/* Menu cards */
+.menu-card {
+  border-radius: 1.25rem;
+  overflow: hidden;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.menu-card:hover {
+  transform: translateY(-2px);
+}
+
+.menu-img-wrap {
+  position: relative;
+}
+
+.menu-img {
+  height: 170px;
+  object-fit: cover;
+}
+
+.menu-popular-pill {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(255, 193, 7, 0.95);
+  color: #111;
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
   
