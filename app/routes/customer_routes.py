@@ -23,6 +23,38 @@ FREE_DELIVERY_THRESHOLD = Decimal("25.00")
 PICKUP_DISCOUNT_RATE = Decimal("0.15")
 
 
+def get_recommendations(cart: dict, limit: int = 6):
+    """
+    Simple upsell engine:
+    If cart contains a main category, recommend add-ons (sides/sauces/drinks/desserts)
+    not already in the cart.
+    """
+    if not cart:
+        return []
+
+    cart_ids = {int(k) for k in cart.keys()} if cart else set()
+
+    main_categories = {"mains", "burgers", "wraps", "rice combos", "meal deals"}
+    upsell_categories = ["Sides", "Sauces", "Drinks", "Desserts"]
+
+    cart_items = MenuItem.query.filter(MenuItem.id.in_(list(cart_ids))).all()
+    has_main = any(((it.category or "").strip().lower() in main_categories) for it in cart_items)
+
+    if not has_main:
+        return []
+
+    recs = (
+        MenuItem.query
+        .filter(MenuItem.is_available == True)  # noqa: E712
+        .filter(MenuItem.category.in_(upsell_categories))
+        .filter(~MenuItem.id.in_(list(cart_ids)))
+        .order_by(MenuItem.category.asc(), MenuItem.price.asc())
+        .limit(limit)
+        .all()
+    )
+    return recs
+
+
 @customer_bp.get("/menu")
 def menu():
     q = (request.args.get("q") or "").strip()
@@ -68,7 +100,7 @@ def cart_add(item_id: int):
 def cart_view():
     cart = get_cart()
     if not cart:
-        return render_template("customer/cart.html", items=[], total=Decimal("0.00"))
+        return render_template("customer/cart.html", items=[], total=Decimal("0.00"), recs=[])
 
     ids = [int(k) for k in cart.keys()]
     menu_items = MenuItem.query.filter(MenuItem.id.in_(ids)).all()
@@ -84,7 +116,9 @@ def cart_view():
         items.append({"item": mi, "qty": qty, "line_total": line_total})
 
     total = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return render_template("customer/cart.html", items=items, total=total)
+
+    recs = get_recommendations(cart, limit=6)
+    return render_template("customer/cart.html", items=items, total=total, recs=recs)
 
 
 @customer_bp.post("/cart/remove/<int:item_id>")

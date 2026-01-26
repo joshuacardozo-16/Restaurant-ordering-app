@@ -18,7 +18,7 @@
           <thead class="table-light">
             <tr>
               <th>Item</th>
-              <th style="width:180px;">Quantity</th>
+              <th style="width:180px;">Qty</th>
               <th>Price</th>
               <th>Total</th>
               <th></th>
@@ -68,7 +68,8 @@
 
   <div class="col-lg-4">
     <div class="position-sticky" style="top: 92px;">
-      <div class="p-3 bg-white border rounded-4 shadow-sm">
+
+      <div class="p-3 bg-white border rounded-4 shadow-sm mb-3">
         <div class="fw-semibold mb-2">Order Summary</div>
 
         <div class="d-flex justify-content-between">
@@ -77,7 +78,7 @@
         </div>
 
         <div class="text-muted small mt-2">
-          Delivery fee and recommendations appear at checkout.
+          Pickup discount (15%) and free delivery over £25 apply at checkout.
         </div>
 
         {% if items %}
@@ -86,6 +87,36 @@
           </a>
         {% endif %}
       </div>
+
+      {% if recs and items %}
+      <div class="p-3 bg-white border rounded-4 shadow-sm">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">Recommended add-ons</div>
+          <span class="badge text-bg-warning text-dark">Sales boost</span>
+        </div>
+
+        <div class="text-muted small mb-3">
+          Most customers add a side, sauce or drink with their meal.
+        </div>
+
+        <div class="d-grid gap-2">
+          {% for r in recs %}
+            <div class="d-flex justify-content-between align-items-center border rounded-3 p-2">
+              <div>
+                <div class="fw-semibold small">{{ r.name }}</div>
+                <div class="text-muted small">{{ r.category }} • £{{ "%.2f"|format(r.price) }}</div>
+              </div>
+
+              <form method="post" action="{{ url_for('customer.cart_add', item_id=r.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-dark" type="submit">Add</button>
+              </form>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
     </div>
   </div>
 </div>
