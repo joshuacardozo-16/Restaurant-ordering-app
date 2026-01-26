@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required
+from ..services.firestore_analytics import build_admin_kpis
 
 from ..extensions import db
 from ..models.order import Order
@@ -106,3 +107,10 @@ def order_update_status(order_id: int):
 
     flash(f"Order #{order.id} updated to {new_status.replace('_',' ')} ✅", "success")
     return redirect(url_for("admin.orders_list"))
+
+@admin_bp.get("/analytics")
+@login_required
+@admin_required
+def analytics():
+    data = build_admin_kpis(days=30)
+    return render_template("admin/analytics.html", data=data)

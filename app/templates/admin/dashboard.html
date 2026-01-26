@@ -4,7 +4,11 @@
 <div class="p-4 bg-white rounded-4 shadow-sm border">
   <h1 class="h4 mb-2">Admin Dashboard</h1>
   <p class="text-muted mb-4">Manage menu items and keep your restaurant listings updated.</p>
-  <a class="btn btn-dark" href="{{ url_for('admin.menu_list') }}">Manage Menu</a>
-  <a class="btn btn-dark" href="{{ url_for('admin.orders_list') }}">Manage Orders</a>
+
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-dark" href="{{ url_for('admin.menu_list') }}">Manage Menu</a>
+    <a class="btn btn-dark" href="{{ url_for('admin.orders_list') }}">Manage Orders</a>
+    <a class="btn btn-dark" href="{{ url_for('admin.analytics') }}">View Analytics</a>
+  </div>
 </div>
 {% endblock %}
