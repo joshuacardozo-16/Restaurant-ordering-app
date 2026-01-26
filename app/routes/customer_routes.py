@@ -14,6 +14,7 @@ from ..services.cart import (
     clear_cart,
     set_qty,
 )
+from ..services.firestore_events import log_event  # ✅ NEW
 from .checkout_forms import CheckoutForm
 
 customer_bp = Blueprint("customer", __name__, url_prefix="")
@@ -78,6 +79,13 @@ def menu():
         .all()
     ]
 
+    # ✅ Analytics
+    log_event("menu_view", {
+        "q": q or None,
+        "category": category or None,
+        "user_id": current_user.id if current_user.is_authenticated else None,
+    })
+
     return render_template(
         "customer/menu.html",
         items=items,
@@ -91,6 +99,14 @@ def menu():
 @login_required
 def cart_add(item_id: int):
     add_to_cart(item_id, 1)
+
+    # ✅ Analytics
+    log_event("add_to_cart", {
+        "user_id": current_user.id,
+        "item_id": item_id,
+        "qty": 1,
+    })
+
     flash("Added to cart ✅", "success")
     return redirect(request.referrer or url_for("customer.menu"))
 
@@ -162,6 +178,12 @@ def checkout():
     if not cart:
         flash("Your cart is empty.", "warning")
         return redirect(url_for("customer.menu"))
+
+    # ✅ Analytics
+    log_event("checkout_view", {
+        "user_id": current_user.id,
+        "cart_size": sum(int(v) for v in cart.values()),
+    })
 
     # Load items from DB
     ids = [int(k) for k in cart.keys()]
@@ -284,6 +306,18 @@ def checkout():
 
         db.session.commit()
         clear_cart()
+
+        # ✅ Analytics (after successful commit)
+        log_event("order_placed", {
+            "order_id": order.id,
+            "user_id": current_user.id,
+            "order_type": order_type,
+            "subtotal": str(subtotal),
+            "discount": str(discount),
+            "delivery_fee": str(delivery_fee),
+            "total": str(total),
+            "items": [{"item_id": r["item"].id, "qty": r["qty"]} for r in cart_rows],
+        })
 
         flash("Order placed successfully ✅", "success")
         return redirect(url_for("customer.order_confirmation", order_id=order.id))
