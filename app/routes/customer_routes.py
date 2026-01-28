@@ -29,6 +29,20 @@ DELIVERY_FEE = Decimal("2.99")
 FREE_DELIVERY_THRESHOLD = Decimal("25.00")
 PICKUP_DISCOUNT_RATE = Decimal("0.15")
 
+NEW_CUSTOMER_MIN_SPEND = Decimal("15.00")
+NEW_CUSTOMER_RATE = Decimal("0.10")   # 10%
+NEW_CUSTOMER_CAP = Decimal("5.00")    # max £5
+
+
+def is_first_order_eligible(user_id: int) -> bool:
+    # first order only + not admin
+    if not current_user.is_authenticated:
+        return False
+    if getattr(current_user, "role", None) == "admin":
+        return False
+
+    has_order = db.session.query(Order.id).filter(Order.user_id == user_id).first() is not None
+    return not has_order
 
 def get_recommendations(cart: dict, limit: int = 6):
     """
@@ -183,6 +197,15 @@ def menu():
         },
     )
 
+
+    # ✅ New customer promo banner (show once per session)
+    if current_user.is_authenticated and is_first_order_eligible(current_user.id):
+    # Only show if they could actually use it (needs paid subtotal >= £15 later)
+        if not session.get("shown_new_customer_offer"):
+            flash("🎉 Welcome! You get 10% off your first order (up to £5). Minimum spend £15. Not combinable with pickup discount.", "success")
+            session["shown_new_customer_offer"] = True
+            session.modified = True
+
     return render_template(
         "customer/menu.html",
         items=items,
@@ -192,7 +215,6 @@ def menu():
         popular_ids=popular_ids,
         menu_recs=menu_recs,
     )
-
 
 # ----------------------------
 # Meal Deal chooser (ONE flow)
@@ -455,7 +477,6 @@ def checkout():
         {"user_id": current_user.id, "cart_size": sum(int(v) for v in cart.values())},
     )
 
-    # ✅ reward freebies
     free_ids = set(session.get("free_item_ids", []) or [])
 
     ids = [int(k) for k in cart.keys()]
@@ -469,7 +490,7 @@ def checkout():
         return redirect(url_for("customer.menu"))
 
     cart_rows = []
-    subtotal = Decimal("0.00")
+    subtotal = Decimal("0.00")  # ✅ paid subtotal only (free items excluded)
 
     for mi in menu_items:
         qty = int(cart.get(str(mi.id), 0))
@@ -477,6 +498,7 @@ def checkout():
             continue
 
         is_free = mi.id in free_ids
+
         if is_free:
             line_total = Decimal("0.00")
         else:
@@ -492,33 +514,82 @@ def checkout():
     selected_type = (request.args.get("order_type") or form.order_type.data or "delivery").strip()
     form.order_type.data = selected_type
 
+    # -----------------------
+    # ✅ PROMO LOGIC (NO STACKING)
+    # Priority:
+    # 1) first order 10% (min £15, cap £5) -> disables pickup 15%
+    # 2) pickup 15%
+    # -----------------------
     discount = Decimal("0.00")
-    delivery_fee = Decimal("0.00")
+    discount_label = None
 
-    if selected_type == "pickup":
-        discount = (subtotal * PICKUP_DISCOUNT_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    eligible_first_order = (
+        is_first_order_eligible(current_user.id)
+        and subtotal >= NEW_CUSTOMER_MIN_SPEND
+        and subtotal > Decimal("0.00")  # ✅ not for free-only carts
+    )
+
+    if eligible_first_order:
+        discount = (subtotal * NEW_CUSTOMER_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if discount > NEW_CUSTOMER_CAP:
+            discount = NEW_CUSTOMER_CAP
+        discount_label = "New customer discount (10% off)"
     else:
+        if selected_type == "pickup":
+            discount = (subtotal * PICKUP_DISCOUNT_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            discount_label = "Pickup discount (15%)"
+
+    # Delivery fee always applies for delivery (even free-only carts)
+    if selected_type == "delivery":
         delivery_fee = Decimal("0.00") if subtotal >= FREE_DELIVERY_THRESHOLD else DELIVERY_FEE
+    else:
+        delivery_fee = Decimal("0.00")
 
     total = (subtotal - discount + delivery_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    form.requires_payment = (total > 0)
+    # ✅ payment is required if total > 0
+    requires_payment = (total > Decimal("0.00"))
+
+    # If no payment required (e.g., pickup + free-only), relax validators
+    if not requires_payment:
+        form.cardholder_name.validators = [Optional()]
+        form.card_number.validators = [Optional()]
+        form.expiry.validators = [Optional()]
+        form.cvc.validators = [Optional()]
+
     if form.validate_on_submit():
         order_type = (form.order_type.data or "delivery").strip()
 
+        # Recompute on POST using same logic
         discount = Decimal("0.00")
-        delivery_fee = Decimal("0.00")
+        discount_label = None
 
-        if order_type == "pickup":
-            discount = (subtotal * PICKUP_DISCOUNT_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        eligible_first_order = (
+            is_first_order_eligible(current_user.id)
+            and subtotal >= NEW_CUSTOMER_MIN_SPEND
+            and subtotal > Decimal("0.00")
+        )
+
+        if eligible_first_order:
+            discount = (subtotal * NEW_CUSTOMER_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if discount > NEW_CUSTOMER_CAP:
+                discount = NEW_CUSTOMER_CAP
+            discount_label = "New customer discount (10% off)"
         else:
+            if order_type == "pickup":
+                discount = (subtotal * PICKUP_DISCOUNT_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                discount_label = "Pickup discount (15%)"
+
+        if order_type == "delivery":
             delivery_fee = Decimal("0.00") if subtotal >= FREE_DELIVERY_THRESHOLD else DELIVERY_FEE
+        else:
+            delivery_fee = Decimal("0.00")
 
         total = (subtotal - discount + delivery_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        form.requires_payment = (total > 0)
+        requires_payment = (total > Decimal("0.00"))
 
+        # Delivery vs pickup validation
         pickup_time = None
-
         if order_type == "delivery":
             addr1 = (form.delivery_address_line1.data or "").strip()
             city = (form.city.data or "").strip()
@@ -532,8 +603,10 @@ def checkout():
                     cart_rows=cart_rows,
                     subtotal=subtotal,
                     discount=discount,
+                    discount_label=discount_label,
                     delivery_fee=delivery_fee,
                     total=total,
+                    requires_payment=requires_payment,
                 )
         else:
             pickup_time = (form.pickup_time_requested.data or "").strip()
@@ -545,13 +618,18 @@ def checkout():
                     cart_rows=cart_rows,
                     subtotal=subtotal,
                     discount=discount,
+                    discount_label=discount_label,
                     delivery_fee=delivery_fee,
                     total=total,
+                    requires_payment=requires_payment,
                 )
 
-        # payment last4 (demo)
-        raw = (form.card_number.data or "").replace(" ", "")
-        session["payment_last4"] = raw[-4:] if len(raw) >= 4 else None
+        # If payment required, store demo last4
+        if requires_payment:
+            raw = (form.card_number.data or "").replace(" ", "")
+            session["payment_last4"] = raw[-4:] if len(raw) >= 4 else None
+        else:
+            session["payment_last4"] = None
 
         order = Order(
             user_id=current_user.id,
@@ -572,7 +650,6 @@ def checkout():
             mi = row["item"]
             qty = int(row["qty"])
 
-            # ✅ FREE items stored as £0.00 in OrderItem
             if row.get("is_free"):
                 unit_price = Decimal("0.00")
                 line_total = Decimal("0.00")
@@ -589,17 +666,15 @@ def checkout():
             )
             db.session.add(oi)
 
-        # ✅ Commit order
         db.session.commit()
 
-        # ✅ Award loyalty points
         earned = award_points_for_order(current_user.id, order.id, total)
         db.session.commit()
 
-        # ✅ clear cart + session trackers
         clear_cart()
         session["meal_deal_choices"] = {}
-        session["free_item_ids"] = []  # ✅ important
+        session["free_item_ids"] = []
+        session.modified = True
 
         log_event(
             "order_placed",
@@ -609,9 +684,10 @@ def checkout():
                 "order_type": order_type,
                 "subtotal": str(subtotal),
                 "discount": str(discount),
+                "discount_label": discount_label,
                 "delivery_fee": str(delivery_fee),
                 "total": str(total),
-                "items": [{"item_id": r["item"].id, "qty": r["qty"]} for r in cart_rows],
+                "items": [{"item_id": r["item"].id, "qty": r["qty"], "is_free": r.get("is_free", False)} for r in cart_rows],
                 "loyalty_points_earned": earned,
             },
         )
@@ -625,8 +701,10 @@ def checkout():
         cart_rows=cart_rows,
         subtotal=subtotal,
         discount=discount,
+        discount_label=discount_label,
         delivery_fee=delivery_fee,
         total=total,
+        requires_payment=requires_payment,
     )
 
 

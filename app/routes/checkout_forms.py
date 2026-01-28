@@ -7,7 +7,7 @@ class CheckoutForm(FlaskForm):
         "Order Type",
         choices=[("delivery", "Delivery"), ("pickup", "Pickup (15% off)")],
         default="delivery",
-        validators=[DataRequired()],
+        validators=[Optional()],
     )
 
     # Delivery fields
@@ -20,7 +20,7 @@ class CheckoutForm(FlaskForm):
     # Pickup fields
     pickup_time_requested = StringField("Pickup time (e.g. 18:30)", validators=[Optional(), Length(max=40)])
 
-    # ✅ Payment fields (optional by default — enforced only if payment required)
+    # ✅ Payment fields become OPTIONAL (we enforce them only when total > 0 in the route)
     cardholder_name = StringField("Cardholder name", validators=[Optional(), Length(max=120)])
 
     card_number = StringField(
@@ -48,6 +48,7 @@ class CheckoutForm(FlaskForm):
     )
 
     submit = SubmitField("Place order")
+
 
     # ✅ Enforce card details ONLY when server says payment is required
     def validate(self, extra_validators=None):

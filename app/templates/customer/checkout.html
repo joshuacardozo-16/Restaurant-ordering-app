@@ -74,50 +74,61 @@
 
           <hr class="my-4">
 
-          <h2 class="h6 mb-3">Payment (demo)</h2>
-          <div class="row g-3">
-            <div class="col-12">
-              {{ form.cardholder_name.label(class_="form-label") }}
-              {{ form.cardholder_name(class_="form-control", autocomplete="cc-name") }}
+          {# ✅ ONLY CHANGE: hide payment fields if total is £0.00 #}
+          {% if total > 0 %}
+
+            <h2 class="h6 mb-3">Payment (demo)</h2>
+            <div class="row g-3">
+              <div class="col-12">
+                {{ form.cardholder_name.label(class_="form-label") }}
+                {{ form.cardholder_name(class_="form-control", autocomplete="cc-name") }}
+              </div>
+
+              <div class="col-12">
+                {{ form.card_number.label(class_="form-label") }}
+                {{ form.card_number(
+                    class_="form-control",
+                    placeholder="1234 5678 9012 3456",
+                    id="card_number",
+                    inputmode="numeric",
+                    maxlength="19",
+                    autocomplete="cc-number"
+                ) }}
+                <div class="text-muted small mt-1">Demo only — card details are not stored.</div>
+              </div>
+
+              <div class="col-md-6">
+                {{ form.expiry.label(class_="form-label") }}
+                {{ form.expiry(
+                    class_="form-control",
+                    placeholder="MM/YY",
+                    id="expiry",
+                    inputmode="numeric",
+                    maxlength="5",
+                    autocomplete="cc-exp"
+                ) }}
+              </div>
+
+              <div class="col-md-6">
+                {{ form.cvc.label(class_="form-label") }}
+                {{ form.cvc(
+                    class_="form-control",
+                    placeholder="123",
+                    id="cvc",
+                    inputmode="numeric",
+                    maxlength="4",
+                    autocomplete="cc-csc"
+                ) }}
+              </div>
             </div>
 
-            <div class="col-12">
-              {{ form.card_number.label(class_="form-label") }}
-              {{ form.card_number(
-                  class_="form-control",
-                  placeholder="1234 5678 9012 3456",
-                  id="card_number",
-                  inputmode="numeric",
-                  maxlength="19",
-                  autocomplete="cc-number"
-              ) }}
-              <div class="text-muted small mt-1">Demo only — card details are not stored.</div>
+          {% else %}
+
+            <div class="alert alert-success mt-3">
+              ✅ Your total is £0.00 — no payment details required.
             </div>
 
-            <div class="col-md-6">
-              {{ form.expiry.label(class_="form-label") }}
-              {{ form.expiry(
-                  class_="form-control",
-                  placeholder="MM/YY",
-                  id="expiry",
-                  inputmode="numeric",
-                  maxlength="5",
-                  autocomplete="cc-exp"
-              ) }}
-            </div>
-
-            <div class="col-md-6">
-              {{ form.cvc.label(class_="form-label") }}
-              {{ form.cvc(
-                  class_="form-control",
-                  placeholder="123",
-                  id="cvc",
-                  inputmode="numeric",
-                  maxlength="4",
-                  autocomplete="cc-csc"
-              ) }}
-            </div>
-          </div>
+          {% endif %}
 
           <div class="d-grid mt-4">
             {{ form.submit(class_="btn btn-dark btn-lg") }}
@@ -158,10 +169,10 @@
 
             {% if discount and discount > 0 %}
             <div class="d-flex justify-content-between">
-              <span class="text-muted">Pickup discount (15%)</span>
+              <span class="text-muted">{{ discount_label or "Discount" }}</span>
               <span class="fw-semibold">− £{{ "%.2f"|format(discount) }}</span>
             </div>
-            {% endif %}
+            {% endif %}            
 
             {% if delivery_fee and delivery_fee > 0 %}
             <div class="d-flex justify-content-between">
@@ -175,7 +186,7 @@
               <span class="fw-semibold">Total</span>
               <span class="fw-semibold">£{{ "%.2f"|format(total) }}</span>
             </div>
-
+            
             <div class="text-muted small mt-2">
               Delivery requires Address line 1, City and Postcode. Pickup requires a pickup time.
             </div>
