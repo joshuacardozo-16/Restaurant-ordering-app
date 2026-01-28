@@ -1,33 +1,45 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from threading import Thread
+from typing import Optional
+
 from google.cloud import firestore
 
-_client = None
+_client: Optional[firestore.Client] = None
 
 
-def _get_client():
+def _get_client() -> firestore.Client:
     """
     Lazy Firestore client.
-    Uses GOOGLE_APPLICATION_CREDENTIALS locally, default credentials on GCP.
+    Only created when needed, so the app never crashes on startup.
     """
     global _client
     if _client is None:
-        _client = firestore.Client()
+        _client = firestore.Client()  # uses GOOGLE_APPLICATION_CREDENTIALS / ADC
     return _client
+
+
+def _write_event(event_type: str, payload: dict):
+    """
+    Runs in a background thread so requests stay fast.
+    """
+    try:
+        client = _get_client()
+        client.collection("events").add(
+            {
+                "event_type": event_type,
+                "ts": datetime.now(timezone.utc),
+                "payload": payload or {},
+            }
+        )
+    except Exception:
+        # Never break the app for analytics
+        return
 
 
 def log_event(event_type: str, payload: dict | None = None):
     """
-    Fire-and-forget analytics logging.
-    Never breaks the app if Firestore fails.
+    Fire-and-forget analytics logging (non-blocking).
     """
-    try:
-        client = _get_client()
-        doc = {
-            "event_type": event_type,
-            "ts": datetime.now(timezone.utc),
-            "payload": payload or {},
-        }
-        client.collection("events").add(doc)
-    except Exception:
-        # swallow errors so your app still runs
-        return
+    Thread(target=_write_event, args=(event_type, payload or {}), daemon=True).start()

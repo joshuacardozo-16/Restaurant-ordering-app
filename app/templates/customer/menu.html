@@ -1,200 +1,218 @@
 {% extends "base.html" %}
 {% block title %}Menu{% endblock %}
 
-{# Fixed restaurant section order #}
-{% set CATEGORY_ORDER = [
-  "Starters",
-  "Sharers",
-  "Meal Deals",
-  "Mains",
-  "Rice Combos",
-  "Burgers",
-  "Wraps",
-  "Sides",
-  "Sauces",
-  "Kids Meals",
-  "Desserts",
-  "Drinks"
-] %}
-
-{# Simple “Popular” list (safe now, data-driven later with Firestore) #}
-{% set POPULAR_NAMES = [
-  "Saffron Smash Burger",
-  "Butter Chicken Masala",
-  "Saffron Rice Bowl – Chicken",
-  "Burger Meal Deal",
-  "Wings Sharer (12 pcs)",
-  "Chicken Tikka Wrap",
-  "Loaded Fries (Cheese & Jalapeño)",
-  "Mango Lassi",
-  "Chocolate Fudge Brownie"
-] %}
-
 {% block content %}
-<div class="menu-hero p-4 p-md-5 rounded-4 shadow-sm mb-4 text-white">
-  <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
-    <div>
-      <h1 class="display-6 fw-bold mb-1">Saffron &amp; Smoke</h1>
-      <div class="opacity-75">
-        Pickup gets <span class="fw-semibold">15% off</span> • Free delivery over <span class="fw-semibold">£25</span>
-      </div>
-      <div class="opacity-75 small mt-1">Order in seconds — add sides & sauces to boost your meal.</div>
-    </div>
+<div class="row justify-content-center">
+  <div class="col-lg-11">
 
-    <div class="d-flex gap-2 align-items-center">
-      <a class="btn btn-light btn-sm fw-semibold" href="{{ url_for('customer.cart_view') }}">
-        View Cart
-      </a>
-      <a class="btn btn-outline-light btn-sm" href="#top">Browse</a>
-    </div>
-  </div>
-</div>
+    <!-- MENU HERO -->
+    <div class="ss-hero p-4 p-md-5 shadow-sm mb-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+          <h1 class="h3 fw-bold mb-2">Menu</h1>
+          <div class="ss-muted">
+            Explore our favourites — pickup gets <strong>15% off</strong>, and delivery is <strong>free over £25</strong>.
+          </div>
 
-<div id="top" class="d-flex flex-wrap gap-2 justify-content-between align-items-end mb-3">
-  <div>
-    <h2 class="h5 mb-0">Menu</h2>
-    <div class="text-muted small">Tap a section to jump, or search your favourites.</div>
-  </div>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <span class="ss-chip">🔥 Popular items highlighted</span>
+            <span class="ss-chip">⭐ Meal deals available</span>
+            <span class="ss-chip">🚚 Free delivery £25+</span>
+          </div>
 
-  <form class="d-flex gap-2" method="get" action="{{ url_for('customer.menu') }}">
-    <input class="form-control form-control-sm" type="text" name="q" value="{{ q }}" placeholder="Search menu...">
-
-    <select class="form-select form-select-sm" id="category_jump">
-      <option value="">Jump to section</option>
-      {% for c in CATEGORY_ORDER %}
-        <option value="{{ c|replace(' ','-')|lower }}">{{ c }}</option>
-      {% endfor %}
-    </select>
-
-    <button class="btn btn-dark btn-sm" type="submit">Search</button>
-    {% if q %}
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('customer.menu') }}">Clear</a>
-    {% endif %}
-  </form>
-</div>
-
-{% set placeholder = url_for('static', filename='img/placeholder-food.jpg') %}
-
-{% macro badge_row(item) %}
-  <div class="d-flex gap-2 align-items-center flex-wrap mt-2">
-    {% if item.name in POPULAR_NAMES %}
-      <span class="badge text-bg-warning text-dark">🔥 Popular</span>
-    {% endif %}
-    {% if item.category == "Meal Deals" %}
-      <span class="badge text-bg-success">Value Deal</span>
-    {% endif %}
-    {% if item.category in ["Sauces", "Sides"] %}
-      <span class="badge text-bg-secondary">Add-on</span>
-    {% endif %}
-  </div>
-{% endmacro %}
-
-{% macro item_card(item) %}
-  <div class="col">
-    <div class="card menu-card h-100 border-0 shadow-sm">
-      <div class="menu-img-wrap">
-        <img
-          src="{{ item.image_url or placeholder }}"
-          class="card-img-top menu-img"
-          alt="{{ item.name }}"
-          onerror="this.onerror=null;this.src='{{ placeholder }}';"
-        >
-        {% if item.name in POPULAR_NAMES %}
-          <div class="menu-popular-pill">🔥 Popular</div>
-        {% endif %}
-      </div>
-
-      <div class="card-body d-flex flex-column">
-        <div class="d-flex justify-content-between align-items-start gap-2">
-          <div class="fw-semibold">{{ item.name }}</div>
-          <div class="fw-semibold">£{{ "%.2f"|format(item.price) }}</div>
+          {% if popular_ids %}
+            <div class="ss-muted small mt-2">
+              Showing Popular based on real add-to-cart events.
+            </div>
+          {% endif %}
         </div>
 
-        {% if item.description %}
-          <div class="text-muted small mt-1">{{ item.description }}</div>
-        {% else %}
-          <div class="text-muted small mt-1">Freshly prepared.</div>
-        {% endif %}
-
-        {{ badge_row(item) }}
-
-        <div class="mt-auto pt-3">
-          <form method="post" action="{{ url_for('customer.cart_add', item_id=item.id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-dark btn-sm w-100" type="submit">
-              Add to cart
-            </button>
-          </form>
-        </div>
+        <form class="d-flex gap-2 flex-wrap" method="get" action="{{ url_for('customer.menu') }}">
+          <input class="form-control" style="min-width: 220px;"
+                 type="text" name="q" placeholder="Search dishes..." value="{{ q }}">
+          <select class="form-select" name="category" style="min-width: 200px;">
+            <option value="">All categories</option>
+            {% for c in categories %}
+              <option value="{{ c }}" {% if category==c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-ss" type="submit">Search</button>
+          <a class="btn btn-outline-dark" href="{{ url_for('customer.menu') }}">Reset</a>
+        </form>
       </div>
     </div>
-  </div>
-{% endmacro %}
 
-{% if not items %}
-  <div class="alert alert-info shadow-sm">
-    No menu items found. Try clearing search.
-  </div>
-{% else %}
-
-  {# Group items by category #}
-  {% set grouped = {} %}
-  {% for it in items %}
-    {% set cat = it.category or "Other" %}
-    {% if cat not in grouped %}
-      {% set _ = grouped.update({cat: []}) %}
-    {% endif %}
-    {% set _ = grouped[cat].append(it) %}
-  {% endfor %}
-
-  {# Render in fixed restaurant order #}
-  {% for cat in CATEGORY_ORDER %}
-    {% if grouped.get(cat) %}
-      <div class="mt-4" id="{{ cat|replace(' ','-')|lower }}">
-        <div class="d-flex justify-content-between align-items-end mb-2">
-          <h3 class="h5 mb-0">{{ cat }}</h3>
-          <span class="text-muted small">{{ grouped[cat]|length }} item(s)</span>
-        </div>
-
-        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
-          {% for it in grouped[cat] %}
-            {{ item_card(it) }}
+    {# =========================
+       Sticky category jump bar
+       ========================= #}
+    {% if categories %}
+      <div class="ss-jumpbar">
+        <div class="ss-jump-scroll">
+          {% for c in categories %}
+            <a href="#cat-{{ (c or 'other')|lower|replace(' ','-') }}">{{ c or "Other" }}</a>
           {% endfor %}
         </div>
       </div>
     {% endif %}
-  {% endfor %}
 
-  {# Render any remaining categories not in our order #}
-  {% for cat, cat_items in grouped.items() %}
-    {% if cat not in CATEGORY_ORDER %}
-      <div class="mt-4" id="{{ cat|replace(' ','-')|lower }}">
-        <div class="d-flex justify-content-between align-items-end mb-2">
-          <h3 class="h5 mb-0">{{ cat }}</h3>
-          <span class="text-muted small">{{ cat_items|length }} item(s)</span>
+    {# =========================
+       Recommended strip
+       ========================= #}
+    {% if menu_recs %}
+      <div class="ss-recs-wrap">
+        <div class="ss-recs-head">
+          <h2 class="ss-recs-title">Recommended for you</h2>
+          <span class="ss-sales-badge">Sales boost</span>
         </div>
-        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
-          {% for it in cat_items %}
-            {{ item_card(it) }}
+
+        <div class="ss-recs">
+          {% for r in menu_recs %}
+            {% set img = r.image_url if r.image_url else url_for('static', filename='img/placeholder-food.jpg') %}
+
+            <div class="ss-recs-card">
+              <img src="{{ img }}" alt="{{ r.name }}">
+              <div class="ss-recs-body">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div class="ss-recs-name">{{ r.name }}</div>
+                  <div class="ss-recs-price">£{{ "%.2f"|format(r.price) }}</div>
+                </div>
+
+                <div class="ss-recs-meta">{{ r.category }}</div>
+
+                <div class="mt-2">
+                  {% if current_user.is_authenticated %}
+                    {% if (r.category or "")|lower in ["meal deals", "meal deal"] %}
+                      <a class="btn btn-ss w-100 btn-sm" href="{{ url_for('customer.meal_deal_choose', deal_id=r.id) }}">
+                        Build deal
+                      </a>
+                    {% else %}
+                      <form method="post" action="{{ url_for('customer.cart_add', item_id=r.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-ss w-100 btn-sm" type="submit">Add</button>
+                      </form>
+                    {% endif %}
+                  {% else %}
+                    <a class="btn btn-ss w-100 btn-sm" href="{{ url_for('auth.login') }}">Login to order</a>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
           {% endfor %}
         </div>
       </div>
     {% endif %}
-  {% endfor %}
 
+    {% if not items %}
+      <div class="alert alert-light border shadow-sm rounded-4">
+        No items found. Try clearing filters.
+      </div>
+    {% endif %}
+
+    {# =========================
+       Group items by category
+       ========================= #}
+    {% set ns = namespace(current_cat=None) %}
+
+    {% for item in items %}
+      {% if ns.current_cat != item.category %}
+        {% if ns.current_cat is not none %}
+          </div>  {# close row #}
+          </div>  {# close section wrap #}
+        {% endif %}
+
+        {% set ns.current_cat = item.category %}
+
+        <div class="ss-section-wrap">
+          <div class="ss-section-title">
+            <h2 id="cat-{{ (item.category or 'other')|lower|replace(' ','-') }}">
+              {{ item.category or "Other" }}
+            </h2>
+            <div class="ss-divider"></div>
+          </div>
+
+          <div class="row g-3 mb-2">
+      {% endif %}
+
+      <div class="col-12 col-sm-6 col-lg-4 col-xl-3 d-flex">
+        <div class="card ss-card ss-menu-card h-100 shadow-sm border-0 w-100">
+          {% set img = item.image_url if item.image_url else url_for('static', filename='img/placeholder-food.jpg') %}
+          <img class="ss-img" src="{{ img }}" alt="{{ item.name }}">
+
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+              <div class="fw-bold">{{ item.name }}</div>
+              <div class="ss-price">£{{ "%.2f"|format(item.price) }}</div>
+            </div>
+
+            {# ===== Spice indicator (UI only heuristic) ===== #}
+            {% set text = ((item.name or '') ~ ' ' ~ (item.description or ''))|lower %}
+            {% set spice = 1 %}
+            {% if 'vindaloo' in text or 'very hot' in text or 'extra hot' in text or 'naga' in text %}
+              {% set spice = 3 %}
+            {% elif 'hot' in text or 'spicy' in text or 'chilli' in text or 'chili' in text or 'madras' in text %}
+              {% set spice = 2 %}
+            {% endif %}
+
+            <div class="ss-spice">
+              <span class="label">Spice</span>
+              <span class="dot {% if spice >= 1 %}on{% endif %}"></span>
+              <span class="dot {% if spice >= 2 %}on{% endif %}"></span>
+              <span class="dot {% if spice >= 3 %}on{% endif %}"></span>
+            </div>
+
+            {# Popular badge #}
+            {% if popular_ids and item.id in popular_ids %}
+              <div class="mb-2">
+                <span class="ss-popular">🔥 Popular</span>
+              </div>
+            {% else %}
+              <div class="mb-2" style="height: 24px;"></div>
+            {% endif %}
+
+            {% if item.description %}
+              <div class="text-muted small mb-3">{{ item.description }}</div>
+            {% else %}
+              <div class="text-muted small mb-3">Freshly prepared — perfect with sides and a drink.</div>
+            {% endif %}
+
+            <div class="mt-auto">
+              {% if current_user.is_authenticated %}
+                {% if (item.category or '').lower() in ['meal deals', 'meal deal'] %}
+                  <a class="btn btn-ss w-100"
+                     href="{{ url_for('customer.meal_deal_choose', deal_id=item.id) }}">
+                    Build your meal deal
+                  </a>
+                {% else %}
+                  <form method="post" action="{{ url_for('customer.cart_add', item_id=item.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-ss w-100" type="submit">Add to cart</button>
+                  </form>
+                {% endif %}
+              {% else %}
+                <a class="btn btn-ss w-100" href="{{ url_for('auth.login') }}">Login to order</a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+    {% endfor %}
+
+    {% if items %}
+        </div>  {# close final row #}
+      </div>  {# close final section wrap #}
+    {% endif %}
+  </div>
+</div>
+{# ===== Mini Cart Chip (fixed bottom-right) ===== #}
+{% set cart = session.get('cart', {}) %}
+{% set cart_count = cart.values() | sum %}
+{% if cart_count and cart_count > 0 %}
+  <div class="ss-mini-cart">
+    <span class="count">{{ cart_count }}</span>
+    <span class="label">items in cart</span>
+    <a href="{{ url_for('customer.cart_view') }}">View cart</a>
+  </div>
 {% endif %}
-
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const jump = document.getElementById("category_jump");
-    if (!jump) return;
-
-    jump.addEventListener("change", () => {
-      const id = jump.value;
-      if (!id) return;
-      const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  });
-</script>
 {% endblock %}

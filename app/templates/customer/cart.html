@@ -27,7 +27,19 @@
           <tbody>
           {% for row in items %}
             <tr>
-              <td class="fw-semibold">{{ row.item.name }}</td>
+              <td class="fw-semibold">
+                {{ row.item.name }}
+
+                {# ✅ Meal deal bundle display (only if provided by backend) #}
+                {% if row.bundle %}
+                  <div class="small text-muted mt-1">
+                    <div><strong>Meal deal includes:</strong></div>
+                    <div>• {{ row.bundle.burger.name if row.bundle.burger else "Burger (missing)" }}</div>
+                    <div>• {{ row.bundle.side.name if row.bundle.side else "Side (missing)" }}</div>
+                    <div>• {{ row.bundle.drink.name if row.bundle.drink else "Drink (missing)" }}</div>
+                  </div>
+                {% endif %}
+              </td>
 
               <td>
                 <div class="d-flex align-items-center gap-2">

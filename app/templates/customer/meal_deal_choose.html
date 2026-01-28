@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Choose your Meal Deal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-2">Build your Meal Deal</h1>
+        <p class="text-muted mb-4">
+          <strong>{{ deal.name }}</strong> — choose 1 burger, 1 side, and 1 drink.
+        </p>
+
+        <form method="post" action="{{ url_for('customer.meal_deal_choose_post', deal_id=deal.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Burger</label>
+            <select name="burger_id" class="form-select" required>
+              <option value="">Select a burger…</option>
+              {% for b in burgers %}
+                <option value="{{ b.id }}">{{ b.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Side</label>
+            <select name="side_id" class="form-select" required>
+              <option value="">Select a side…</option>
+              {% for s in sides %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Drink</label>
+            <select name="drink_id" class="form-select" required>
+              <option value="">Select a drink…</option>
+              {% for d in drinks %}
+                <option value="{{ d.id }}">{{ d.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button class="btn btn-dark" type="submit">Save &amp; return to cart</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('customer.cart_view') }}">Cancel</a>
+          </div>
+        </form>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
