@@ -20,22 +20,59 @@ class CheckoutForm(FlaskForm):
     # Pickup fields
     pickup_time_requested = StringField("Pickup time (e.g. 18:30)", validators=[Optional(), Length(max=40)])
 
-    # Payment fields (DEMO UI — do NOT store card numbers)
-    cardholder_name = StringField("Cardholder name", validators=[DataRequired(), Length(max=120)])
+    # ✅ Payment fields (optional by default — enforced only if payment required)
+    cardholder_name = StringField("Cardholder name", validators=[Optional(), Length(max=120)])
+
     card_number = StringField(
-    "Card number",
-    validators=[
-        DataRequired(),
-        Regexp(r"^\d{4} ?\d{4} ?\d{4} ?\d{4}$", message="Enter a valid 16-digit card number.")
-    ],
-)
+        "Card number",
+        validators=[
+            Optional(),
+            Regexp(r"^\d{4} ?\d{4} ?\d{4} ?\d{4}$", message="Enter a valid 16-digit card number."),
+        ],
+    )
+
     expiry = StringField(
         "Expiry (MM/YY)",
-        validators=[DataRequired(), Regexp(r"^(0[1-9]|1[0-2])\/\d{2}$", message="Use MM/YY format.")]
+        validators=[
+            Optional(),
+            Regexp(r"^(0[1-9]|1[0-2])\/\d{2}$", message="Use MM/YY format."),
+        ],
     )
+
     cvc = StringField(
         "CVC",
-        validators=[DataRequired(), Regexp(r"^\d{3,4}$", message="Enter a valid CVC.")]
+        validators=[
+            Optional(),
+            Regexp(r"^\d{3,4}$", message="Enter a valid CVC."),
+        ],
     )
 
     submit = SubmitField("Place order")
+
+    # ✅ Enforce card details ONLY when server says payment is required
+    def validate(self, extra_validators=None):
+        ok = super().validate(extra_validators=extra_validators)
+        if not ok:
+            return False
+
+        requires_payment = bool(getattr(self, "requires_payment", True))
+
+        if requires_payment:
+            # Enforce "required" on payment fields
+            if not (self.cardholder_name.data or "").strip():
+                self.cardholder_name.errors.append("Cardholder name is required.")
+                return False
+
+            if not (self.card_number.data or "").strip():
+                self.card_number.errors.append("Card number is required.")
+                return False
+
+            if not (self.expiry.data or "").strip():
+                self.expiry.errors.append("Expiry is required.")
+                return False
+
+            if not (self.cvc.data or "").strip():
+                self.cvc.errors.append("CVC is required.")
+                return False
+
+        return True

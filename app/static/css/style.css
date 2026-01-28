@@ -529,3 +529,19 @@
     filter: brightness(0.98);
   }
   
+  .ss-nav-rewards{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .ss-points-badge{
+    background: rgba(245,179,1,0.95);
+    color: #111;
+    font-weight: 900;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.78rem;
+    line-height: 1.6;
+  }
+  

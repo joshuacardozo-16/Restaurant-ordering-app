@@ -8,6 +8,20 @@
       <div class="card-body p-4 p-md-5">
         <h1 class="h4 mb-3">Checkout</h1>
 
+        {# ✅ SHOW FORM ERRORS (so delivery failures are visible) #}
+        {% if form.errors %}
+          <div class="alert alert-danger">
+            <strong>Please fix the following:</strong>
+            <ul class="mb-0">
+              {% for field, errs in form.errors.items() %}
+                {% for err in errs %}
+                  <li><strong>{{ field }}</strong>: {{ err }}</li>
+                {% endfor %}
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
         <form method="post">
           {{ form.hidden_tag() }}
 
@@ -127,7 +141,11 @@
                   <div class="fw-semibold">{{ row.item.name }}</div>
                   <div class="text-muted small">Qty: {{ row.qty }}</div>
                 </div>
+                {% if row.is_free %}
+                <div class="fw-semibold"><span class="badge text-bg-success">FREE</span> £0.00</div>
+              {% else %}
                 <div class="fw-semibold">£{{ "%.2f"|format(row.line_total) }}</div>
+              {% endif %}              
               </div>
             {% endfor %}
           </div>
@@ -168,6 +186,7 @@
   </div>
 </div>
 
+
 <script>
   function toggleFields() {
     const selected = document.querySelector('input[name="order_type"]:checked')?.value;
@@ -184,28 +203,23 @@
       deliveryFields.style.display = "block";
       pickupFields.style.display = "none";
 
-      // required for delivery
       if (addr1) addr1.required = true;
       if (city) city.required = true;
       if (postcode) postcode.required = true;
 
-      // not required for delivery
       if (pickupTime) pickupTime.required = false;
     } else {
       deliveryFields.style.display = "none";
       pickupFields.style.display = "block";
 
-      // required for pickup
       if (pickupTime) pickupTime.required = true;
 
-      // not required for pickup
       if (addr1) addr1.required = false;
       if (city) city.required = false;
       if (postcode) postcode.required = false;
     }
   }
 
-  // Reload checkout with order_type=... so totals update server-side
   function refreshPricing() {
     const selected = document.querySelector('input[name="order_type"]:checked')?.value;
     if (!selected) return;

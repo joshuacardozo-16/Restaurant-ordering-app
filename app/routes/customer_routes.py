@@ -1,23 +1,26 @@
 from decimal import Decimal, ROUND_HALF_UP
-from sqlalchemy import case  # for custom category order
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort
 from flask_login import login_required, current_user
+from sqlalchemy import case
+from flask import session
+from ..models.order import Order
 
 from ..extensions import db
 from ..models.menu_item import MenuItem
 from ..models.order import Order
 from ..models.order_item import OrderItem
-from ..services.cart import (
-    add_to_cart,
-    get_cart,
-    remove_from_cart,
-    clear_cart,
-    set_qty,
-)
-from ..services.firestore_events import log_event  # analytics
-from ..services.firestore_popular import get_popular_item_ids  # popular badge
+from ..models.loyalty import LoyaltyAccount, LoyaltyTransaction
+
+from ..services.cart import add_to_cart, get_cart, remove_from_cart, clear_cart, set_qty
+from ..services.firestore_events import log_event
+from ..services.firestore_popular import get_popular_item_ids
+from ..services.loyalty_service import award_points_for_order
+
 from .checkout_forms import CheckoutForm
+
+from flask_login import login_required, current_user
+from ..models.order import Order
 
 
 customer_bp = Blueprint("customer", __name__, url_prefix="")
@@ -337,6 +340,10 @@ def cart_view():
     items = []
     total = Decimal("0.00")
 
+    # ✅ reward freebies
+    free_ids = set(session.get("free_item_ids", []) or [])
+
+    # ✅ meal deal bundles
     meal_choices = session.get("meal_deal_choices", {}) or {}
 
     # pull all selected IDs in one query
@@ -357,9 +364,15 @@ def cart_view():
         if qty <= 0:
             continue
 
-        line_total = (Decimal(str(mi.price)) * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        total += line_total
+        # ✅ FREE handling
+        is_free = mi.id in free_ids
+        if is_free:
+            line_total = Decimal("0.00")
+        else:
+            line_total = (Decimal(str(mi.price)) * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            total += line_total
 
+        # ✅ Meal deal bundle display (optional)
         bundle = None
         if (mi.category or "").strip().lower() in {"meal deals", "meal deal"}:
             sel = meal_choices.get(str(mi.id))
@@ -370,13 +383,19 @@ def cart_view():
                     "drink": selected_lookup.get(sel.get("drink_id")),
                 }
 
-        items.append({"item": mi, "qty": qty, "line_total": line_total, "bundle": bundle})
+        items.append({
+            "item": mi,
+            "qty": qty,
+            "line_total": line_total,
+            "bundle": bundle,
+            "is_free": is_free,
+        })
 
     total = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     recs = get_recommendations(cart, limit=6)
 
     return render_template("customer/cart.html", items=items, total=total, recs=recs)
-
+    
 
 @customer_bp.post("/cart/remove/<int:item_id>")
 @login_required
@@ -436,8 +455,15 @@ def checkout():
         {"user_id": current_user.id, "cart_size": sum(int(v) for v in cart.values())},
     )
 
+    # ✅ reward freebies
+    free_ids = set(session.get("free_item_ids", []) or [])
+
     ids = [int(k) for k in cart.keys()]
-    menu_items = MenuItem.query.filter(MenuItem.id.in_(ids), MenuItem.is_available == True).all()  # noqa: E712
+    menu_items = MenuItem.query.filter(
+        MenuItem.id.in_(ids),
+        MenuItem.is_available == True  # noqa: E712
+    ).all()
+
     if not menu_items:
         flash("No available items found in your cart.", "warning")
         return redirect(url_for("customer.menu"))
@@ -449,9 +475,15 @@ def checkout():
         qty = int(cart.get(str(mi.id), 0))
         if qty <= 0:
             continue
-        line_total = (Decimal(str(mi.price)) * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        subtotal += line_total
-        cart_rows.append({"item": mi, "qty": qty, "line_total": line_total})
+
+        is_free = mi.id in free_ids
+        if is_free:
+            line_total = Decimal("0.00")
+        else:
+            line_total = (Decimal(str(mi.price)) * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            subtotal += line_total
+
+        cart_rows.append({"item": mi, "qty": qty, "line_total": line_total, "is_free": is_free})
 
     subtotal = subtotal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -470,6 +502,7 @@ def checkout():
 
     total = (subtotal - discount + delivery_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
+    form.requires_payment = (total > 0)
     if form.validate_on_submit():
         order_type = (form.order_type.data or "delivery").strip()
 
@@ -482,6 +515,7 @@ def checkout():
             delivery_fee = Decimal("0.00") if subtotal >= FREE_DELIVERY_THRESHOLD else DELIVERY_FEE
 
         total = (subtotal - discount + delivery_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        form.requires_payment = (total > 0)
 
         pickup_time = None
 
@@ -489,6 +523,7 @@ def checkout():
             addr1 = (form.delivery_address_line1.data or "").strip()
             city = (form.city.data or "").strip()
             postcode = (form.postcode.data or "").strip()
+
             if not addr1 or not city or not postcode:
                 flash("For delivery, please provide Address line 1, City and Postcode.", "danger")
                 return render_template(
@@ -514,6 +549,7 @@ def checkout():
                     total=total,
                 )
 
+        # payment last4 (demo)
         raw = (form.card_number.data or "").replace(" ", "")
         session["payment_last4"] = raw[-4:] if len(raw) >= 4 else None
 
@@ -535,20 +571,35 @@ def checkout():
         for row in cart_rows:
             mi = row["item"]
             qty = int(row["qty"])
-            unit_price = Decimal(str(mi.price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+            # ✅ FREE items stored as £0.00 in OrderItem
+            if row.get("is_free"):
+                unit_price = Decimal("0.00")
+                line_total = Decimal("0.00")
+            else:
+                unit_price = Decimal(str(mi.price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                line_total = (unit_price * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
             oi = OrderItem(
                 order_id=order.id,
                 menu_item_id=mi.id,
                 quantity=qty,
                 unit_price_at_time=unit_price,
-                line_total=(unit_price * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+                line_total=line_total,
             )
             db.session.add(oi)
 
+        # ✅ Commit order
         db.session.commit()
+
+        # ✅ Award loyalty points
+        earned = award_points_for_order(current_user.id, order.id, total)
+        db.session.commit()
+
+        # ✅ clear cart + session trackers
         clear_cart()
         session["meal_deal_choices"] = {}
+        session["free_item_ids"] = []  # ✅ important
 
         log_event(
             "order_placed",
@@ -561,10 +612,11 @@ def checkout():
                 "delivery_fee": str(delivery_fee),
                 "total": str(total),
                 "items": [{"item_id": r["item"].id, "qty": r["qty"]} for r in cart_rows],
+                "loyalty_points_earned": earned,
             },
         )
 
-        flash("Order placed successfully ✅", "success")
+        flash(f"Order placed successfully ✅ +{earned} reward points!", "success")
         return redirect(url_for("customer.order_confirmation", order_id=order.id))
 
     return render_template(
@@ -578,12 +630,122 @@ def checkout():
     )
 
 
-@customer_bp.get("/orders/<int:order_id>")
+@customer_bp.get("/rewards")
 @login_required
-def order_confirmation(order_id: int):
-    order = Order.query.filter_by(id=order_id, user_id=current_user.id).first_or_404()
-    last4 = session.pop("payment_last4", None)
-    return render_template("customer/order_confirmation.html", order=order, last4=last4)
+def rewards():
+    acct = LoyaltyAccount.query.filter_by(user_id=current_user.id).first()
+    if not acct:
+        acct = LoyaltyAccount(
+            user_id=current_user.id,
+            points_balance=0,
+            lifetime_earned=0,
+            lifetime_redeemed=0,
+        )
+        db.session.add(acct)
+        db.session.commit()
+
+    txns = (
+        LoyaltyTransaction.query
+        .filter_by(user_id=current_user.id)
+        .order_by(LoyaltyTransaction.ts.desc())
+        .limit(20)
+        .all()
+    )
+
+    # ✅ increased costs (harder to redeem)
+    rewards_catalog = [
+        {"id": "drink", "name": "Free Soft Drink", "cost": 150},
+        {"id": "side", "name": "Free Side", "cost": 250},
+        {"id": "dessert", "name": "Free Dessert", "cost": 400},
+        {"id": "voucher5", "name": "£5 Off Voucher", "cost": 650},
+    ]
+
+    return render_template(
+        "customer/rewards.html",
+        points=acct.points_balance,
+        txns=txns,
+        rewards_catalog=rewards_catalog,
+    )
+
+
+@customer_bp.post("/rewards/redeem")
+@login_required
+def rewards_redeem():
+    reward_id = (request.form.get("reward_id") or "").strip()
+
+    rewards_map = {
+        "drink": {"name": "Free Soft Drink", "cost": 150, "category": "Drinks"},
+        "side": {"name": "Free Side", "cost": 250, "category": "Sides"},
+        "dessert": {"name": "Free Dessert", "cost": 400, "category": "Desserts"},
+        "voucher5": {"name": "£5 Off Voucher", "cost": 650, "category": None},
+    }
+
+    if reward_id not in rewards_map:
+        flash("Invalid reward selection.", "danger")
+        return redirect(url_for("customer.rewards"))
+
+    acct = LoyaltyAccount.query.filter_by(user_id=current_user.id).first()
+    if not acct:
+        acct = LoyaltyAccount(
+            user_id=current_user.id,
+            points_balance=0,
+            lifetime_earned=0,
+            lifetime_redeemed=0,
+        )
+        db.session.add(acct)
+        db.session.commit()
+
+    reward = rewards_map[reward_id]
+    cost = int(reward["cost"])
+
+    if acct.points_balance < cost:
+        flash("Not enough points to redeem this reward.", "warning")
+        return redirect(url_for("customer.rewards"))
+
+    # For now: voucher not implemented as cart item
+    if reward_id == "voucher5":
+        flash("Voucher redemption coming next (we’ll apply it at checkout).", "info")
+        return redirect(url_for("customer.rewards"))
+
+    # ✅ pick an actual item to give for free (cheapest in that category)
+    free_item = (
+        MenuItem.query
+        .filter(MenuItem.is_available == True)  # noqa: E712
+        .filter(MenuItem.category == reward["category"])
+        .order_by(MenuItem.price.asc())
+        .first()
+    )
+    if not free_item:
+        flash("No available item found for this reward right now.", "warning")
+        return redirect(url_for("customer.rewards"))
+
+    # ✅ deduct points
+    acct.points_balance -= cost
+    acct.lifetime_redeemed += cost
+
+    # ✅ add to cart normally
+    add_to_cart(free_item.id, 1)
+
+    # ✅ mark it as FREE in session
+    free_ids = session.get("free_item_ids", []) or []
+    if free_item.id not in free_ids:
+        free_ids.append(free_item.id)
+    session["free_item_ids"] = free_ids
+    session.modified = True
+
+    # ✅ record loyalty transaction using your schema (kind/points/note/ts)
+    txn = LoyaltyTransaction(
+        user_id=current_user.id,
+        order_id=None,
+        kind="redeem",
+        points=cost,
+        note=f"Redeemed: {reward['name']} → {free_item.name}",
+    )
+    db.session.add(txn)
+    db.session.commit()
+
+    flash(f"Redeemed {reward['name']} ✅ Added {free_item.name} to cart for FREE.", "success")
+    return redirect(url_for("customer.cart_view"))
 
 
 @customer_bp.get("/my-orders")
@@ -591,3 +753,10 @@ def order_confirmation(order_id: int):
 def my_orders():
     orders = Order.query.filter_by(user_id=current_user.id).order_by(Order.created_at.desc()).all()
     return render_template("customer/my_orders.html", orders=orders)
+
+@customer_bp.get("/orders/<int:order_id>")
+@login_required
+def order_confirmation(order_id: int):
+    order = Order.query.filter_by(id=order_id, user_id=current_user.id).first_or_404()
+    last4 = session.pop("payment_last4", None)
+    return render_template("customer/order_confirmation.html", order=order, last4=last4)

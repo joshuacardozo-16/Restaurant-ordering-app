@@ -210,3 +210,7 @@ __marimo__/
 # Local dev database
 local.db
 *.db
+
+*.json
+gcp-keys/
+env.ps1

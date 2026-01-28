@@ -18,6 +18,11 @@
       <a class="btn btn-outline-light btn-sm" href="{{ url_for('customer.menu') }}">Menu</a>
 
       {% if current_user.is_authenticated %}
+        {# ✅ Points badge (ONLY ONE rewards button) #}
+        <a class="btn btn-outline-light btn-sm ss-nav-rewards" href="{{ url_for('customer.rewards') }}">
+          Rewards
+          <span class="ss-points-badge">{{ loyalty_points }} pts</span>
+        </a>
 
         {% set cart = session.get('cart', {}) %}
         {% set cart_count = cart.values() | sum %}

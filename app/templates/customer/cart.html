@@ -57,9 +57,22 @@
                 </div>
               </td>
 
-              <td>£{{ "%.2f"|format(row.item.price) }}</td>
-              <td>£{{ "%.2f"|format(row.line_total) }}</td>
-
+              <td>
+                {% if row.is_free %}
+                  <span class="badge text-bg-success">FREE</span>
+                {% else %}
+                  £{{ "%.2f"|format(row.item.price) }}
+                {% endif %}
+              </td>
+              
+              <td>
+                {% if row.is_free %}
+                  <span class="fw-semibold">£0.00</span>
+                {% else %}
+                  £{{ "%.2f"|format(row.line_total) }}
+                {% endif %}
+              </td>
+              
               <td class="text-end">
                 <form method="post" action="{{ url_for('customer.cart_remove', item_id=row.item.id) }}">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

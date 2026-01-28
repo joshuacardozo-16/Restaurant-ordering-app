@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}My Rewards{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card ss-card shadow-sm border-0">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-2">My Rewards</h1>
+        <p class="text-muted mb-3">Earn points every time you order. Redeem them for freebies.</p>
+
+        <div class="p-3 rounded-4 border" style="background: rgba(255,255,255,0.75);">
+          <div class="text-muted small">Your balance</div>
+          <div class="display-6 fw-bold mb-0">{{ points }} pts</div>
+        </div>
+
+        <hr class="my-4">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-bold">Redeem</div>
+          <span class="badge text-bg-warning text-dark">Sales boost</span>
+        </div>
+
+        <div class="d-grid gap-2">
+          {% for r in rewards_catalog %}
+            <form method="post" action="{{ url_for('customer.rewards_redeem') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="reward_id" value="{{ r.id }}">
+              <button class="btn btn-ss w-100" type="submit" {% if points < r.cost %}disabled{% endif %}>
+                {{ r.name }} — {{ r.cost }} pts
+              </button>
+            </form>
+          {% endfor %}
+        </div>
+
+        <div class="text-muted small mt-3">
+          Tip: loyalty increases repeat orders and basket size (customers return to hit reward thresholds).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <h2 class="h6 fw-bold mb-3">Recent activity</h2>
+
+        {% if txns %}
+          <div class="list-group shadow-sm rounded-4 overflow-hidden">
+            {% for t in txns %}
+              {% set is_earn = (t.kind == 'earn') %}
+              <div class="list-group-item d-flex justify-content-between align-items-start">
+                <div class="me-3">
+                  <div class="fw-semibold">
+                    {% if is_earn %}
+                      ✅ Points earned
+                    {% else %}
+                      🎁 Reward redeemed
+                    {% endif %}
+                  </div>
+
+                  {% if t.note %}
+                    <div class="text-muted small">{{ t.note }}</div>
+                  {% endif %}
+
+                  <div class="text-muted small">
+                    {{ t.ts.strftime('%d %b %Y • %H:%M') if t.ts else '' }}
+                  </div>
+                </div>
+
+                <div class="fw-bold">
+                  {% if is_earn %}
+                    +{{ t.points }}
+                  {% else %}
+                    −{{ t.points }}
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">No rewards activity yet.</div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
