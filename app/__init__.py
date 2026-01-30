@@ -2,11 +2,19 @@ from flask import Flask, render_template
 from .config import DevConfig
 from .extensions import db, login_manager, csrf
 from .models.loyalty import LoyaltyAccount
+import os
 
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(DevConfig)
+
+    # ✅ Ensure instance folder exists (Flask-SQLAlchemy often uses it)
+    os.makedirs(app.instance_path, exist_ok=True)
+
+    # ✅ FORCE database path to your real DB: instance/local.db (absolute path)
+    db_path = os.path.join(app.instance_path, "local.db")
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + db_path.replace("\\", "/")
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -26,6 +34,11 @@ def create_app():
 
     from .routes.customer_routes import customer_bp
     app.register_blueprint(customer_bp)
+
+    # ✅ (If you have API blueprint, keep it)
+    from .api import api_bp
+    csrf.exempt(api_bp)  
+    app.register_blueprint(api_bp)
 
     # ✅ Inject loyalty points into ALL templates
     @app.context_processor

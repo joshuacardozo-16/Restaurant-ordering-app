@@ -8,6 +8,10 @@ from ..models.menu_item import MenuItem
 from ..services.authz import admin_required
 from .menu_forms import MenuItemForm
 
+from flask import current_app, redirect, url_for, flash
+from flask_login import login_required, current_user
+from app.services.email_service import send_email
+
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
@@ -114,3 +118,22 @@ def order_update_status(order_id: int):
 def analytics():
     data = build_admin_kpis(days=30)
     return render_template("admin/analytics.html", data=data)
+
+
+
+@admin_bp.get("/test-email")
+@login_required
+def test_email():
+    if getattr(current_user, "role", None) != "admin":
+        flash("Forbidden", "danger")
+        return redirect(url_for("home"))
+
+    ok = send_email(
+        to_email=current_user.email,
+        subject="SendGrid test ✅",
+        html_content="<p>This is a test email from your app.</p>"
+    )
+
+    flash("Email sent ✅" if ok else "Email failed ❌ (check env vars / SendGrid)", "info")
+    return redirect(url_for("admin.dashboard"))
+

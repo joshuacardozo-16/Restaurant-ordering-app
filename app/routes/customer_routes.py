@@ -22,6 +22,10 @@ from .checkout_forms import CheckoutForm
 from flask_login import login_required, current_user
 from ..models.order import Order
 
+from flask import current_app
+from ..services.maps_distance import get_distance_and_eta_km
+import re
+
 
 customer_bp = Blueprint("customer", __name__, url_prefix="")
 
@@ -461,8 +465,55 @@ def cart_dec(item_id: int):
 
 
 # ----------------------------
-# Checkout + Orders (unchanged)
+# Checkout + Orders (Delivery quote + Checkout)
 # ----------------------------
+
+import re
+from decimal import Decimal, ROUND_HALF_UP
+from wtforms.validators import Optional
+from flask import (
+    jsonify, request, current_app,
+    flash, redirect, url_for, render_template, session
+)
+from flask_login import login_required, current_user
+
+# Keep this ONE regex only (no duplicates)
+UK_POSTCODE_RE = re.compile(r"^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$", re.I)
+
+
+@customer_bp.get("/delivery-quote")
+@login_required
+def delivery_quote():
+    """
+    Returns JSON: distance_km, eta, blocked
+    Called by checkout page via fetch() as user types postcode.
+    """
+    postcode = (request.args.get("postcode") or "").strip().upper()
+    if not postcode or not UK_POSTCODE_RE.match(postcode):
+        return jsonify({"ok": False, "error": "invalid_postcode"}), 200
+
+    origin = current_app.config.get("RESTAURANT_ADDRESS", "Bournemouth, UK")
+    api_key = current_app.config.get("GOOGLE_MAPS_API_KEY", "")
+    max_km = float(current_app.config.get("DELIVERY_MAX_KM", 5.0))
+
+    if not api_key:
+        return jsonify({"ok": False, "error": "missing_api_key"}), 200
+
+    res = get_distance_and_eta_km(api_key=api_key, origin=origin, destination=postcode)
+    if not res.ok or res.distance_km is None:
+        return jsonify({"ok": False, "error": "maps_failed"}), 200
+
+    blocked = float(res.distance_km) > float(max_km)
+
+    return jsonify({
+        "ok": True,
+        "postcode": postcode,
+        "distance_km": float(res.distance_km),
+        "eta": res.duration_text,
+        "blocked": bool(blocked),
+        "max_km": float(max_km),
+    }), 200
+
 
 @customer_bp.route("/checkout", methods=["GET", "POST"])
 @login_required
@@ -490,7 +541,7 @@ def checkout():
         return redirect(url_for("customer.menu"))
 
     cart_rows = []
-    subtotal = Decimal("0.00")  # ✅ paid subtotal only (free items excluded)
+    subtotal = Decimal("0.00")  # paid subtotal only (free items excluded)
 
     for mi in menu_items:
         qty = int(cart.get(str(mi.id), 0))
@@ -502,10 +553,17 @@ def checkout():
         if is_free:
             line_total = Decimal("0.00")
         else:
-            line_total = (Decimal(str(mi.price)) * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            line_total = (Decimal(str(mi.price)) * qty).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
             subtotal += line_total
 
-        cart_rows.append({"item": mi, "qty": qty, "line_total": line_total, "is_free": is_free})
+        cart_rows.append({
+            "item": mi,
+            "qty": qty,
+            "line_total": line_total,
+            "is_free": is_free
+        })
 
     subtotal = subtotal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -513,6 +571,51 @@ def checkout():
 
     selected_type = (request.args.get("order_type") or form.order_type.data or "delivery").strip()
     form.order_type.data = selected_type
+
+    # -----------------------
+    # ✅ Maps API delivery radius check (NO refresh needed)
+    # - delivery_info used to display distance/ETA
+    # - delivery_blocked used to hard-stop on POST
+    # -----------------------
+    delivery_info = None
+    delivery_blocked = False
+
+    if selected_type == "delivery":
+        # Prefer POST (normal form submit), else GET
+        postcode_guess = (
+            (form.postcode.data or "").strip().upper()
+            or (request.args.get("postcode") or "").strip().upper()
+        )
+
+        if postcode_guess and UK_POSTCODE_RE.match(postcode_guess):
+            origin = current_app.config.get("RESTAURANT_ADDRESS", "Bournemouth, UK")
+            api_key = current_app.config.get("GOOGLE_MAPS_API_KEY", "")
+            max_km = float(current_app.config.get("DELIVERY_MAX_KM", 5.0))
+
+            if api_key:
+                res = get_distance_and_eta_km(api_key=api_key, origin=origin, destination=postcode_guess)
+                if res.ok and res.distance_km is not None:
+                    delivery_info = {"km": float(res.distance_km), "eta": res.duration_text}
+                    if float(res.distance_km) > float(max_km):
+                        delivery_blocked = True
+
+    # ✅ Hard stop ONLY when user submits order (POST)
+    if request.method == "POST" and selected_type == "delivery" and delivery_blocked:
+        flash("Sorry — this postcode is outside our delivery radius. Please choose Pickup instead.", "danger")
+        return render_template(
+            "customer/checkout.html",
+            form=form,
+            cart_rows=cart_rows,
+            subtotal=subtotal,
+            discount=Decimal("0.00"),
+            discount_label=None,
+            delivery_fee=Decimal("0.00"),
+            total=subtotal,
+            requires_payment=True,
+            delivery_info=delivery_info,
+            delivery_blocked=delivery_blocked,
+            delivery_max_km=current_app.config.get("DELIVERY_MAX_KM", 5.0),
+        )
 
     # -----------------------
     # ✅ PROMO LOGIC (NO STACKING)
@@ -526,7 +629,7 @@ def checkout():
     eligible_first_order = (
         is_first_order_eligible(current_user.id)
         and subtotal >= NEW_CUSTOMER_MIN_SPEND
-        and subtotal > Decimal("0.00")  # ✅ not for free-only carts
+        and subtotal > Decimal("0.00")
     )
 
     if eligible_first_order:
@@ -539,7 +642,7 @@ def checkout():
             discount = (subtotal * PICKUP_DISCOUNT_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             discount_label = "Pickup discount (15%)"
 
-    # Delivery fee always applies for delivery (even free-only carts)
+    # Delivery fee
     if selected_type == "delivery":
         delivery_fee = Decimal("0.00") if subtotal >= FREE_DELIVERY_THRESHOLD else DELIVERY_FEE
     else:
@@ -547,10 +650,8 @@ def checkout():
 
     total = (subtotal - discount + delivery_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    # ✅ payment is required if total > 0
     requires_payment = (total > Decimal("0.00"))
 
-    # If no payment required (e.g., pickup + free-only), relax validators
     if not requires_payment:
         form.cardholder_name.validators = [Optional()]
         form.card_number.validators = [Optional()]
@@ -560,7 +661,7 @@ def checkout():
     if form.validate_on_submit():
         order_type = (form.order_type.data or "delivery").strip()
 
-        # Recompute on POST using same logic
+        # Recompute discount on POST using same rules
         discount = Decimal("0.00")
         discount_label = None
 
@@ -588,8 +689,8 @@ def checkout():
         total = (subtotal - discount + delivery_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         requires_payment = (total > Decimal("0.00"))
 
-        # Delivery vs pickup validation
         pickup_time = None
+
         if order_type == "delivery":
             addr1 = (form.delivery_address_line1.data or "").strip()
             city = (form.city.data or "").strip()
@@ -607,6 +708,27 @@ def checkout():
                     delivery_fee=delivery_fee,
                     total=total,
                     requires_payment=requires_payment,
+                    delivery_info=delivery_info,
+                    delivery_blocked=delivery_blocked,
+                    delivery_max_km=current_app.config.get("DELIVERY_MAX_KM", 5.0),
+                )
+
+            # Hard stop if outside radius (extra safety)
+            if delivery_blocked:
+                flash("Sorry — this postcode is outside our delivery radius.", "danger")
+                return render_template(
+                    "customer/checkout.html",
+                    form=form,
+                    cart_rows=cart_rows,
+                    subtotal=subtotal,
+                    discount=discount,
+                    discount_label=discount_label,
+                    delivery_fee=delivery_fee,
+                    total=total,
+                    requires_payment=requires_payment,
+                    delivery_info=delivery_info,
+                    delivery_blocked=delivery_blocked,
+                    delivery_max_km=current_app.config.get("DELIVERY_MAX_KM", 5.0),
                 )
         else:
             pickup_time = (form.pickup_time_requested.data or "").strip()
@@ -622,6 +744,9 @@ def checkout():
                     delivery_fee=delivery_fee,
                     total=total,
                     requires_payment=requires_payment,
+                    delivery_info=delivery_info,
+                    delivery_blocked=delivery_blocked,
+                    delivery_max_km=current_app.config.get("DELIVERY_MAX_KM", 5.0),
                 )
 
         # If payment required, store demo last4
@@ -671,6 +796,25 @@ def checkout():
         earned = award_points_for_order(current_user.id, order.id, total)
         db.session.commit()
 
+        # --- EMAIL CONFIRMATION (Cloud Run) ---
+        from app.services.email_service import send_order_confirmation_via_cloudrun
+        order_items = OrderItem.query.filter_by(order_id=order.id).all()
+
+        try:
+            for oi in order_items:
+                _ = getattr(oi, "menu_item", None)
+        except Exception:
+            pass
+
+        sent = send_order_confirmation_via_cloudrun(
+            order=order,
+            order_items=order_items,
+            user_email=current_user.email,
+)
+        if not sent:
+            current_app.logger.warning("Order email failed (Cloud Run). Check env vars / function logs.")
+        # --- END EMAIL ---
+            
         clear_cart()
         session["meal_deal_choices"] = {}
         session["free_item_ids"] = []
@@ -705,6 +849,9 @@ def checkout():
         delivery_fee=delivery_fee,
         total=total,
         requires_payment=requires_payment,
+        delivery_info=delivery_info,
+        delivery_blocked=delivery_blocked,
+        delivery_max_km=current_app.config.get("DELIVERY_MAX_KM", 5.0),
     )
 
 

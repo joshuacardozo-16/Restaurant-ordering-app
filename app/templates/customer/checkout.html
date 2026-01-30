@@ -39,24 +39,52 @@
 
           <div id="delivery_fields">
             <h2 class="h6 mt-3">Delivery address</h2>
+
             <div class="mb-3">
               {{ form.delivery_address_line1.label(class_="form-label") }}
               {{ form.delivery_address_line1(class_="form-control") }}
             </div>
+
             <div class="mb-3">
               {{ form.delivery_address_line2.label(class_="form-label") }}
               {{ form.delivery_address_line2(class_="form-control") }}
             </div>
+
             <div class="row g-3">
               <div class="col-md-6">
                 {{ form.city.label(class_="form-label") }}
                 {{ form.city(class_="form-control") }}
               </div>
+
               <div class="col-md-6">
                 {{ form.postcode.label(class_="form-label") }}
-                {{ form.postcode(class_="form-control") }}
+                {# ensure postcode has an id so JS can find it #}
+                {{ form.postcode(class_="form-control", id="postcode") }}
               </div>
             </div>
+
+            {# ✅ Live distance/ETA box (AJAX updates this) #}
+            <div id="deliveryQuoteBox" class="alert alert-info mt-3 d-none"></div>
+            <div id="deliveryBlockedBox" class="alert alert-danger mt-3 d-none"></div>
+
+            {# ✅ Keep backend-rendered info too (optional) #}
+            {% if delivery_info %}
+              <div class="alert alert-info mt-3 mb-0">
+                🚗 Distance:
+                <strong>{{ "%.1f"|format(delivery_info.km if delivery_info.km is defined else delivery_info["km"]) }} km</strong>
+                {% set eta = (delivery_info.eta if delivery_info.eta is defined else delivery_info.get("eta")) %}
+                {% if eta %}
+                  • ETA: <strong>{{ eta }}</strong>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if delivery_blocked %}
+              <div class="alert alert-danger mt-3">
+                ❌ Sorry — this address is outside our delivery radius.
+              </div>
+            {% endif %}
+
             <div class="mt-3">
               {{ form.delivery_instructions.label(class_="form-label") }}
               {{ form.delivery_instructions(class_="form-control", rows="3") }}
@@ -74,7 +102,7 @@
 
           <hr class="my-4">
 
-          {# ✅ ONLY CHANGE: hide payment fields if total is £0.00 #}
+          {# ✅ hide payment fields if total is £0.00 #}
           {% if total > 0 %}
 
             <h2 class="h6 mb-3">Payment (demo)</h2>
@@ -153,10 +181,10 @@
                   <div class="text-muted small">Qty: {{ row.qty }}</div>
                 </div>
                 {% if row.is_free %}
-                <div class="fw-semibold"><span class="badge text-bg-success">FREE</span> £0.00</div>
-              {% else %}
-                <div class="fw-semibold">£{{ "%.2f"|format(row.line_total) }}</div>
-              {% endif %}              
+                  <div class="fw-semibold"><span class="badge text-bg-success">FREE</span> £0.00</div>
+                {% else %}
+                  <div class="fw-semibold">£{{ "%.2f"|format(row.line_total) }}</div>
+                {% endif %}
               </div>
             {% endfor %}
           </div>
@@ -168,17 +196,17 @@
             </div>
 
             {% if discount and discount > 0 %}
-            <div class="d-flex justify-content-between">
-              <span class="text-muted">{{ discount_label or "Discount" }}</span>
-              <span class="fw-semibold">− £{{ "%.2f"|format(discount) }}</span>
-            </div>
-            {% endif %}            
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">{{ discount_label or "Discount" }}</span>
+                <span class="fw-semibold">− £{{ "%.2f"|format(discount) }}</span>
+              </div>
+            {% endif %}
 
             {% if delivery_fee and delivery_fee > 0 %}
-            <div class="d-flex justify-content-between">
-              <span class="text-muted">Delivery fee</span>
-              <span class="fw-semibold">+ £{{ "%.2f"|format(delivery_fee) }}</span>
-            </div>
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Delivery fee</span>
+                <span class="fw-semibold">+ £{{ "%.2f"|format(delivery_fee) }}</span>
+              </div>
             {% endif %}
 
             <hr>
@@ -186,7 +214,7 @@
               <span class="fw-semibold">Total</span>
               <span class="fw-semibold">£{{ "%.2f"|format(total) }}</span>
             </div>
-            
+
             <div class="text-muted small mt-2">
               Delivery requires Address line 1, City and Postcode. Pickup requires a pickup time.
             </div>
@@ -196,7 +224,6 @@
     </div>
   </div>
 </div>
-
 
 <script>
   function toggleFields() {
@@ -231,15 +258,6 @@
     }
   }
 
-  function refreshPricing() {
-    const selected = document.querySelector('input[name="order_type"]:checked')?.value;
-    if (!selected) return;
-    const baseUrl = "{{ url_for('customer.checkout') }}";
-    const url = new URL(baseUrl, window.location.origin);
-    url.searchParams.set("order_type", selected);
-    window.location.href = url.toString();
-  }
-
   function formatCardNumber(value) {
     const digits = value.replace(/\D/g, "").slice(0, 16);
     return digits.replace(/(.{4})/g, "$1 ").trim();
@@ -251,15 +269,80 @@
     return digits.slice(0, 2) + "/" + digits.slice(2);
   }
 
+  function debounce(fn, delay) {
+    let t = null;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), delay);
+    };
+  }
+
+  async function fetchDeliveryQuote(postcode) {
+    const quoteBox = document.getElementById("deliveryQuoteBox");
+    const blockedBox = document.getElementById("deliveryBlockedBox");
+
+    if (!quoteBox || !blockedBox) return;
+
+    quoteBox.classList.add("d-none");
+    blockedBox.classList.add("d-none");
+    quoteBox.textContent = "";
+    blockedBox.textContent = "";
+
+    const selected = document.querySelector('input[name="order_type"]:checked')?.value;
+    if (selected !== "delivery") return;
+
+    if (!postcode || postcode.trim().length < 5) return;
+
+    const url = new URL("{{ url_for('customer.delivery_quote') }}", window.location.origin);
+    url.searchParams.set("postcode", postcode.trim());
+
+    const resp = await fetch(url.toString(), { headers: { "Accept": "application/json" }});
+    const data = await resp.json();
+
+    if (!data.ok) {
+      if (data.error === "missing_api_key") {
+        quoteBox.textContent = "⚠️ Delivery quote unavailable (Google Maps API key missing).";
+        quoteBox.classList.remove("d-none");
+      }
+      return;
+    }
+
+    const km = Number(data.distance_km).toFixed(1);
+    const eta = data.eta ? ` • ETA: ${data.eta}` : "";
+    quoteBox.innerHTML = `🚗 Distance: <strong>${km} km</strong>${eta}`;
+    quoteBox.classList.remove("d-none");
+
+    if (data.blocked) {
+      blockedBox.innerHTML = `❌ Outside our delivery radius (${data.max_km} km). Please choose Pickup.`;
+      blockedBox.classList.remove("d-none");
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     toggleFields();
 
+    // keep your order_type refresh (pricing recalculation)
     document.querySelectorAll('input[name="order_type"]').forEach((el) => {
       el.addEventListener("change", () => {
         toggleFields();
-        refreshPricing();
+        // keep your old behavior for order type changes:
+        const baseUrl = "{{ url_for('customer.checkout') }}";
+        const url = new URL(baseUrl, window.location.origin);
+        url.searchParams.set("order_type", el.value);
+        window.location.href = url.toString();
       });
     });
+
+    // ✅ postcode live fetch (NO REFRESH)
+    const postcodeEl = document.getElementById("postcode");
+    if (postcodeEl) {
+      const run = debounce(() => fetchDeliveryQuote(postcodeEl.value), 600);
+      postcodeEl.addEventListener("input", run);
+
+      if (postcodeEl.value && postcodeEl.value.trim().length >= 5) {
+        fetchDeliveryQuote(postcodeEl.value);
+      }
+    }
 
     const card = document.getElementById("card_number");
     const expiry = document.getElementById("expiry");
@@ -284,5 +367,4 @@
     }
   });
 </script>
-
 {% endblock %}
