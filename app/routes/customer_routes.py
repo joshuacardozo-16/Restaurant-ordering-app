@@ -38,6 +38,27 @@ NEW_CUSTOMER_RATE = Decimal("0.10")   # 10%
 NEW_CUSTOMER_CAP = Decimal("5.00")    # max £5
 
 
+from google.cloud import firestore
+
+def get_popular_ids_cached():
+    """
+    Reads the cached popular items doc written by the Cloud Function:
+    collection: analytics
+    doc: popular_items
+    field: popular_ids (list[int])
+    """
+    try:
+        client = firestore.Client()
+        doc = client.collection("analytics").document("popular_items").get()
+        if not doc.exists:
+            return set()
+        data = doc.to_dict() or {}
+        ids = data.get("popular_ids") or []
+        return {int(x) for x in ids if str(x).isdigit()}
+    except Exception:
+        return set()
+
+
 def is_first_order_eligible(user_id: int) -> bool:
     # first order only + not admin
     if not current_user.is_authenticated:
@@ -174,8 +195,8 @@ def menu():
         .all()
     ]
 
-    # Popular (Firestore)
-    popular_ids = get_popular_item_ids(days=30, top_n=6)
+    # Popular (cached result written by Cloud Function)
+    popular_ids = get_popular_ids_cached()
 
     # Fallback popular if Firestore has no add_to_cart events yet
     if not popular_ids:
