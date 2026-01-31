@@ -32,7 +32,24 @@
 
           <div class="mb-3">
             {{ form.password.label(class_="form-label") }}
-            {{ form.password(class_="form-control", placeholder="Create a strong password") }}
+            {{ form.password(
+                class_="form-control",
+                placeholder="Create a strong password",
+                id="password"
+            ) }}
+
+            <div class="form-text">
+              Must be at least 8 characters, include uppercase, lowercase, and a number.
+            </div>
+
+            <!-- Strength Bar -->
+            <div class="ss-strength-wrap mt-2">
+              <div class="ss-strength-track" aria-hidden="true">
+                <div id="pw-bar" class="ss-strength-fill"></div>
+              </div>
+              <small id="pw-strength" class="fw-semibold d-block mt-1"></small>
+            </div>
+
             {% for e in form.password.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
           </div>
 
@@ -54,4 +71,73 @@
     </div>
   </div>
 </div>
+
+<style>
+  /* Strength bar styling (simple + clean) */
+  .ss-strength-track {
+    width: 100%;
+    height: 10px;
+    background: #e9ecef;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .ss-strength-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    transition: width 180ms ease, background-color 180ms ease;
+    background: #dc3545; /* red by default */
+  }
+</style>
+
+<script>
+  const pw = document.getElementById("password");
+  const strength = document.getElementById("pw-strength");
+  const bar = document.getElementById("pw-bar");
+
+  function scorePassword(v) {
+    let score = 0;
+    if (v.length >= 8) score++;
+    if (/[A-Z]/.test(v)) score++;
+    if (/[a-z]/.test(v)) score++;
+    if (/\d/.test(v)) score++;
+    // optional tiny bonus for length 12+
+    if (v.length >= 12) score++;
+    return score; // 0..5
+  }
+
+  if (pw) {
+    pw.addEventListener("input", () => {
+      const v = pw.value || "";
+      const s = scorePassword(v);
+
+      if (!v) {
+        strength.textContent = "";
+        strength.className = "fw-semibold d-block mt-1";
+        bar.style.width = "0%";
+        bar.style.backgroundColor = "#dc3545";
+        return;
+      }
+
+      // Map score -> bar %
+      // 1=20%, 2=40%, 3=60%, 4=80%, 5=100%
+      const pct = Math.min(100, s * 20);
+      bar.style.width = pct + "%";
+
+      if (s <= 2) {
+        strength.textContent = "Weak password";
+        strength.className = "text-danger fw-semibold d-block mt-1";
+        bar.style.backgroundColor = "#dc3545"; // red
+      } else if (s === 3) {
+        strength.textContent = "Medium strength";
+        strength.className = "text-warning fw-semibold d-block mt-1";
+        bar.style.backgroundColor = "#ffc107"; // yellow
+      } else {
+        strength.textContent = "Strong password";
+        strength.className = "text-success fw-semibold d-block mt-1";
+        bar.style.backgroundColor = "#198754"; // green
+      }
+    });
+  }
+</script>
 {% endblock %}
