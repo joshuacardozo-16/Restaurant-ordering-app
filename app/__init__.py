@@ -9,12 +9,17 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(DevConfig)
 
-    # ✅ Ensure instance folder exists (Flask-SQLAlchemy often uses it)
+    # ✅ Ensure instance folder exists
     os.makedirs(app.instance_path, exist_ok=True)
 
-    # ✅ FORCE database path to your real DB: instance/local.db (absolute path)
-    db_path = os.path.join(app.instance_path, "local.db")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + db_path.replace("\\", "/")
+    # ✅ Use DATABASE_URL if provided (tests will set this),
+    # otherwise use your real local DB in instance/local.db
+    db_uri = os.getenv("DATABASE_URL")
+    if db_uri:
+        app.config["SQLALCHEMY_DATABASE_URI"] = db_uri
+    else:
+        db_path = os.path.join(app.instance_path, "local.db")
+        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + db_path.replace("\\", "/")
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -37,7 +42,7 @@ def create_app():
 
     # ✅ (If you have API blueprint, keep it)
     from .api import api_bp
-    csrf.exempt(api_bp)  
+    csrf.exempt(api_bp)
     app.register_blueprint(api_bp)
 
     # ✅ Inject loyalty points into ALL templates
@@ -57,7 +62,9 @@ def create_app():
     def home():
         return render_template("home.html")
 
-    with app.app_context():
-        db.create_all()
+    # ✅ Only create tables in normal app run, not tests
+    if not app.config.get("TESTING"):
+        with app.app_context():
+            db.create_all()
 
     return app
