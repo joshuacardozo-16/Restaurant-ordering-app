@@ -26,6 +26,7 @@ from flask import current_app
 from ..services.maps_distance import get_distance_and_eta_km
 import re
 
+from sqlalchemy import case
 
 customer_bp = Blueprint("customer", __name__, url_prefix="")
 
@@ -187,13 +188,30 @@ def menu():
 
     items = query.order_by(order_case.asc(), MenuItem.name.asc()).all()
 
-    categories = [
-        c[0]
-        for c in MenuItem.query.with_entities(MenuItem.category)
-        .distinct()
-        .order_by(order_case.asc())
+    category_order = case(
+    (MenuItem.category == "Starters", 0),
+    (MenuItem.category == "Sharers", 1),
+    (MenuItem.category == "Mains", 2),
+    (MenuItem.category == "Burgers", 3),
+    (MenuItem.category == "Wraps", 4),
+    (MenuItem.category == "Rice Combos", 5),
+    (MenuItem.category == "Kids Meals", 6),
+    (MenuItem.category == "Sides", 7),
+    (MenuItem.category == "Sauces", 8),
+    (MenuItem.category == "Desserts", 9),
+    (MenuItem.category == "Drinks", 10),
+    (MenuItem.category == "Meal Deals", 11),
+    else_=999,
+)
+
+    categories = (
+        db.session.query(MenuItem.category)
+        .group_by(MenuItem.category)          # ✅ Postgres-friendly distinct
+        .order_by(category_order.asc())       # ✅ ordering works now
         .all()
-    ]
+)
+    # if you later use categories as strings:
+    categories = [c[0] for c in categories]
 
     # Popular (cached result written by Cloud Function)
     popular_ids = get_popular_ids_cached()

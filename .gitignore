@@ -214,3 +214,7 @@ local.db
 *.json
 gcp-keys/
 env.ps1
+
+
+instance/
+*.db

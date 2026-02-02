@@ -9,17 +9,19 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(DevConfig)
 
-    # ✅ Ensure instance folder exists
+# Ensure instance folder exists
     os.makedirs(app.instance_path, exist_ok=True)
 
-    # ✅ Use DATABASE_URL if provided (tests will set this),
-    # otherwise use your real local DB in instance/local.db
     db_uri = os.getenv("DATABASE_URL")
+
     if db_uri:
+    # Cloud / Tests
         app.config["SQLALCHEMY_DATABASE_URI"] = db_uri
     else:
+    # LOCAL SAFE DATABASE
         db_path = os.path.join(app.instance_path, "local.db")
         app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + db_path.replace("\\", "/")
+
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -63,8 +65,11 @@ def create_app():
         return render_template("home.html")
 
     # ✅ Only create tables in normal app run, not tests
-    if not app.config.get("TESTING"):
+    if app.config.get("TESTING") is True:
+        pass
+    else:
         with app.app_context():
             db.create_all()
+
 
     return app

@@ -1,0 +1,49 @@
+runtime: python311
+
+entrypoint: gunicorn -b :$PORT main:app
+
+# App Engine standard -> use beta_settings for Cloud SQL Unix socket
+beta_settings:
+  cloud_sql_instances: saffron-smoke-personal:europe-west2:saffron-postgres
+
+env_variables:
+  # -----------------------------
+  # Flask / App
+  # -----------------------------
+  FLASK_ENV: "production"
+  SECRET_KEY: "saffron-smoke-dev-9f8a7c2d3e4b5a6"
+
+  # -----------------------------
+  # Database (Cloud SQL Postgres via Unix socket)
+  # IMPORTANT: password contains special chars so URL-encode it (you already did %40)
+  # -----------------------------
+  DATABASE_URL: "postgresql+psycopg2://appuser:Saffron%40smoke@/saffron_app?host=/cloudsql/saffron-smoke-personal:europe-west2:saffron-postgres"
+
+  # -----------------------------
+  # Google Cloud Project
+  # (Often not required, but safe to include)
+  # -----------------------------
+  GOOGLE_CLOUD_PROJECT: "saffron-smoke-personal"
+
+  # -----------------------------
+  # Google Maps (Delivery distance + ETA)
+  # -----------------------------
+  GOOGLE_MAPS_API_KEY: "AIzaSyCH58xN0VCnSNUrKCb-mQGvl8cciAhYXNI"
+  RESTAURANT_ADDRESS: "Bournemouth, UK"
+  DELIVERY_MAX_KM: "5"
+
+  # -----------------------------
+  # SendGrid (Email)
+  # -----------------------------
+  SENDGRID_API_KEY: "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"
+  SENDGRID_FROM_EMAIL: "joshcardozo16@gmail.com"
+  SENDGRID_FROM_NAME: "Saffron & Smoke"
+
+  # -----------------------------
+  # Cloud Function / Cloud Run endpoint (Order confirmation email)
+  # -----------------------------
+  ORDER_EMAIL_FUNCTION_URL: "https://sendorderconfirmationemail-915531816353.europe-west2.run.app"
+  FUNCTION_SHARED_SECRET: "saffron-smoke-coursework-2026-secure"
+
+automatic_scaling:
+  max_instances: 2
