@@ -218,3 +218,8 @@ env.ps1
 
 instance/
 *.db
+
+
+app.yaml
+env.ps1
+*.json

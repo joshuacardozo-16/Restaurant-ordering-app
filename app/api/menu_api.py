@@ -30,7 +30,7 @@ def api_menu_list():
     if q:
         query = query.filter(MenuItem.name.ilike(f"%{q}%"))
 
-    # same category order as your UI (optional but nice)
+    # same category order as my UI (optional but nice)
     CATEGORY_ORDER = [
         "Starters", "Sharers", "Mains", "Burgers", "Wraps", "Rice Combos", "Kids Meals",
         "Sides", "Sauces", "Desserts", "Drinks", "Meal Deals",

@@ -6,17 +6,21 @@ class BaseConfig:
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # ✅ CRITICAL:
-    # Use DATABASE_URL if provided (Cloud / Tests)
-    # Otherwise fallback to local SQLite safely
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL",
-        "sqlite:///local.db"
-    )
+    # Use DATABASE_URL if provided (Cloud / Tests), else local SQLite
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///local.db")
 
     GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
     RESTAURANT_ADDRESS = os.getenv("RESTAURANT_ADDRESS", "Bournemouth, UK")
-    DELIVERY_MAX_KM = float(os.getenv("DELIVERY_MAX_KM", "5"))
+
+    # Guard against bad values
+    try:
+        DELIVERY_MAX_KM = float(os.getenv("DELIVERY_MAX_KM", "5"))
+    except Exception:
+        DELIVERY_MAX_KM = 5.0
+
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+    SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL", "")
+    SENDGRID_FROM_NAME = os.getenv("SENDGRID_FROM_NAME", "")
 
     ORDER_EMAIL_FUNCTION_URL = os.getenv("ORDER_EMAIL_FUNCTION_URL", "")
     FUNCTION_SHARED_SECRET = os.getenv("FUNCTION_SHARED_SECRET", "")

@@ -8,6 +8,7 @@ from typing import Any
 from google.cloud import firestore
 
 from ..models.order import Order
+from ..models.menu_item import MenuItem  # ✅ ADDED
 from ..extensions import db
 
 
@@ -97,10 +98,16 @@ def build_admin_kpis(days: int = 30) -> dict:
         by_type[et] += 1
 
         payload = ev.get("payload") or {}
-        # popular items from add_to_cart payload
+
+        # ✅ CHANGED: count popular items using item_id (your Firestore payload uses item_id)
         if et == "add_to_cart":
-            name = payload.get("item_name") or payload.get("name") or payload.get("item") or "Unknown item"
-            add_item_counts[str(name)] += int(payload.get("qty") or 1)
+            item_id = payload.get("item_id")
+            qty = int(payload.get("qty") or 1)
+
+            if item_id is not None:
+                add_item_counts[str(item_id)] += qty
+            else:
+                add_item_counts["Unknown item"] += qty
 
         ts = _safe_dt(ev.get("ts"))
         if ts:
@@ -124,6 +131,21 @@ def build_admin_kpis(days: int = 30) -> dict:
 
     top_items = add_item_counts.most_common(10)
 
+    # ✅ ADDED: map menu_item_id -> MenuItem.name using SQLAlchemy
+    try:
+        id_to_name = {
+            str(m.id): m.name
+            for m in MenuItem.query.with_entities(MenuItem.id, MenuItem.name).all()
+        }
+
+        top_items_named = [
+            (id_to_name.get(str(item_id), f"Item #{item_id}"), count)
+            for item_id, count in top_items
+        ]
+    except Exception:
+        # fallback: keep IDs if anything goes wrong
+        top_items_named = top_items
+
     # Peak hour (simple)
     peak_hour = None
     if hour_counts:
@@ -142,6 +164,6 @@ def build_admin_kpis(days: int = 30) -> dict:
         "firestore_ok": fs_ok,
         "event_counts": dict(by_type),
         "funnel": funnel,
-        "top_items": top_items,
+        "top_items": top_items_named,  # ✅ CHANGED: now names not IDs
         "peak_hour": peak_hour,
     }

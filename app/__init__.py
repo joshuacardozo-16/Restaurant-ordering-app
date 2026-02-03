@@ -1,5 +1,5 @@
 from flask import Flask, render_template
-from .config import DevConfig
+from .config import DevConfig, ProdConfig
 from .extensions import db, login_manager, csrf
 from .models.loyalty import LoyaltyAccount
 import os
@@ -7,22 +7,25 @@ import os
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object(DevConfig)
 
-# Ensure instance folder exists
+    # Use production config on App Engine, dev otherwise
+    if os.getenv("GAE_ENV", "").startswith("standard"):
+        app.config.from_object(ProdConfig)
+    else:
+        app.config.from_object(DevConfig)
+
+    # Ensure instance folder exists
     os.makedirs(app.instance_path, exist_ok=True)
 
+    # If DATABASE_URL exists, use it. Otherwise use instance/local.db
     db_uri = os.getenv("DATABASE_URL")
-
     if db_uri:
-    # Cloud / Tests
         app.config["SQLALCHEMY_DATABASE_URI"] = db_uri
     else:
-    # LOCAL SAFE DATABASE
         db_path = os.path.join(app.instance_path, "local.db")
         app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + db_path.replace("\\", "/")
 
-
+    # Init extensions (ALWAYS)
     db.init_app(app)
     login_manager.init_app(app)
     csrf.init_app(app)
@@ -42,12 +45,12 @@ def create_app():
     from .routes.customer_routes import customer_bp
     app.register_blueprint(customer_bp)
 
-    # ✅ (If you have API blueprint, keep it)
+    # API blueprint
     from .api import api_bp
     csrf.exempt(api_bp)
     app.register_blueprint(api_bp)
 
-    # ✅ Inject loyalty points into ALL templates
+    # Inject loyalty points into ALL templates
     @app.context_processor
     def inject_loyalty_points():
         points = 0
@@ -64,12 +67,9 @@ def create_app():
     def home():
         return render_template("home.html")
 
-    # ✅ Only create tables in normal app run, not tests
-    if app.config.get("TESTING") is True:
-        pass
-    else:
+    # Create tables if not testing (does not wipe)
+    if not app.config.get("TESTING"):
         with app.app_context():
             db.create_all()
-
 
     return app
